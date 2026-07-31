@@ -5,4 +5,5 @@ coverage.html
 report.json
 .env
 qrok.yaml
+docs/TZ.md
 dist/
