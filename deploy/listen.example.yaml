@@ -1,0 +1,13 @@
+# Конфиг dev-клиента qrok listen.
+# Токен: qrok login (сохраняется в ~/.config/qrok/credentials.json) или listen.token ниже.
+
+log:
+  level: info
+  format: pretty
+
+listen:
+  gateway: localhost:9090
+  tunnel_id: dev-tunnel # тот же, что у агента (make seed-dev)
+  topics: [] # пусто = все топики туннеля
+  forward: http://127.0.0.1:8888/
+  catch_up: false

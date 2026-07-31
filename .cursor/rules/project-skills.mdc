@@ -1,0 +1,32 @@
+---
+description: Использовать все project skills из .claude/skills при релевантных задачах
+alwaysApply: true
+---
+
+# Project skills (qrok)
+
+**Каноническое расположение:** `.claude/skills/<name>/SKILL.md`  
+Копия для Cursor discovery: `.cursor/skills/` (синхронизация: `make sync-skills`).  
+При расхождении приоритет у `.claude/skills`.
+
+## Обязательно
+
+Перед работой по теме из таблицы — **прочитай соответствующий `SKILL.md`** (и `references/`, если скилл на них ссылается). Не импровизируй поверх скилла.
+
+| Skill | Путь | Когда применять |
+|-------|------|-----------------|
+| `go-backend-microservices` | `.claude/skills/go-backend-microservices/` | Go-сервисы, clean architecture, observability, ошибки, concurrency |
+| `golang-pro` | `.claude/skills/golang-pro/` | Идиоматичный Go 1.21+, generics, goroutines, gRPC, pprof, CLI |
+| `go-testing` | `.claude/skills/go-testing/` | Unit/integration/e2e, testify, Makefile, compose, build-теги qrok |
+| `kafka-development` | `.claude/skills/kafka-development/` | Kafka, agent source, топики, партиции, consumer groups |
+| `rabbitmq-development` | `.claude/skills/rabbitmq-development/` | RabbitMQ / AMQP (этап 2) |
+
+## Добавление скилла
+
+1. Создай `.claude/skills/<name>/SKILL.md` (frontmatter: `name`, `description`).
+2. Выполни `make sync-skills`.
+3. Добавь строку в таблицу выше.
+
+## Вызов в чате
+
+`/go-testing`, `/golang-pro`, `/kafka-development` и т.д. — явный запрос прочитать скилл.

@@ -1,0 +1,125 @@
+package stream
+
+import (
+	"context"
+	"io"
+	"sync"
+
+	"google.golang.org/grpc"
+
+	qrokv1 "qrok/internal/proto/qrok/v1"
+	"qrok/internal/tunnel/grpcutil"
+	"qrok/pkg/fault"
+)
+
+// AgentClient — gRPC AgentStream с ожиданием Ack по event_id.
+type AgentClient struct {
+	conn   *grpc.ClientConn
+	client qrokv1.TunnelServiceClient
+
+	mu   sync.Mutex
+	acks map[string]chan struct{}
+}
+
+func NewAgentClient(ctx context.Context, gatewayAddr, token string) (*AgentClient, error) {
+	conn, err := grpcutil.Dial(ctx, gatewayAddr)
+	if err != nil {
+		return nil, err
+	}
+	return &AgentClient{
+		conn:   conn,
+		client: qrokv1.NewTunnelServiceClient(conn),
+		acks:   make(map[string]chan struct{}),
+	}, nil
+}
+
+func (c *AgentClient) Close() error {
+	return c.conn.Close()
+}
+
+// RunSession открывает стрим, шлёт hello и обрабатывает события через send/waitAck.
+func (c *AgentClient) RunSession(
+	ctx context.Context,
+	token string,
+	hello *qrokv1.AgentHello,
+	handle func(ctx context.Context, send func(context.Context, *qrokv1.EventEnvelope) error) error,
+) error {
+	streamCtx := grpcutil.WithBearer(ctx, token)
+	stream, err := c.client.AgentStream(streamCtx)
+	if err != nil {
+		return fault.ErrServiceUnavail.Wrap(err, "не удалось открыть AgentStream").WithOp("agent.stream.open")
+	}
+
+	if err := stream.Send(&qrokv1.AgentStreamRequest{
+		Msg: &qrokv1.AgentStreamRequest_Hello{Hello: hello},
+	}); err != nil {
+		return fault.ErrServiceUnavail.Wrap(err, "не удалось отправить hello").WithOp("agent.stream.hello")
+	}
+
+	recvDone := make(chan error, 1)
+	go func() {
+		recvDone <- c.recvLoop(stream)
+	}()
+
+	send := func(sendCtx context.Context, ev *qrokv1.EventEnvelope) error {
+		if err := stream.Send(&qrokv1.AgentStreamRequest{
+			Msg: &qrokv1.AgentStreamRequest_Event{Event: ev},
+		}); err != nil {
+			return fault.ErrServiceUnavail.Wrap(err, "не удалось отправить событие").WithOp("agent.stream.send")
+		}
+		return c.waitAck(sendCtx, ev.GetEventId())
+	}
+
+	err = handle(ctx, send)
+
+	stream.CloseSend()
+	select {
+	case recvErr := <-recvDone:
+		if err == nil && recvErr != nil && recvErr != io.EOF {
+			return recvErr
+		}
+	default:
+	}
+	return err
+}
+
+func (c *AgentClient) recvLoop(stream grpc.BidiStreamingClient[qrokv1.AgentStreamRequest, qrokv1.AgentStreamResponse]) error {
+	for {
+		resp, err := stream.Recv()
+		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return fault.ErrServiceUnavail.Wrap(err, "ошибка чтения AgentStream").WithOp("agent.stream.recv")
+		}
+		if ack := resp.GetAck(); ack != nil {
+			c.mu.Lock()
+			if ch, ok := c.acks[ack.GetEventId()]; ok {
+				select {
+				case ch <- struct{}{}:
+				default:
+				}
+			}
+			c.mu.Unlock()
+		}
+	}
+}
+
+func (c *AgentClient) waitAck(ctx context.Context, eventID string) error {
+	ch := make(chan struct{}, 1)
+	c.mu.Lock()
+	c.acks[eventID] = ch
+	c.mu.Unlock()
+	defer func() {
+		c.mu.Lock()
+		delete(c.acks, eventID)
+		c.mu.Unlock()
+	}()
+
+	select {
+	case <-ch:
+		return nil
+	case <-ctx.Done():
+		return fault.ErrTimeout.Wrap(ctx.Err(), "таймаут ожидания ack от облака").WithOp("agent.stream.wait_ack")
+	}
+}

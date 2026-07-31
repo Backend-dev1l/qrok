@@ -1,0 +1,42 @@
+---
+description: При рефакторинге обновлять все пути, импорты и dev-совместимость
+alwaysApply: true
+---
+
+# Рефакторинг: пути и совместимость
+
+Любое переименование/перенос пакетов, cmd, миграций или конфигов — **не считается готовым**, пока проект снова поднимается с нуля.
+
+## Обязательный чеклист
+
+1. **Импорты Go** — `rg` по старому пути пакета/директории по всему репо; обновить все вхождения.
+2. **Точки входа** — `Makefile` (`build`, `run-server`, `run-agent`, `seed-dev`), `go build ./...`, `go run ./cmd`.
+3. **Конфиги и примеры** — `deploy/*.example.yaml`, `.env.example`, дефолты в `internal/config`.
+4. **Миграции** — если меняется схема/SQL в коде: новая goose-миграция или правка с учётом уже применённых версий; проверить `make migrate-up` на чистой БД.
+5. **Тесты** — unit, при необходимости integration/e2e; пути в `*_test.go` и build-тегах.
+6. **Документация** — минимум `README.md` (структура, команды запуска), если затронуты пути.
+
+## Перед завершением задачи
+
+```bash
+make verify    # go build ./... + go test -race ./...
+```
+
+При изменении инфраструктуры дополнительно (если Docker доступен):
+
+```bash
+make compose-up && make migrate-up && make run-server
+```
+
+## Типичные ловушки qrok
+
+- Сервер: `cmd/main.go` + `internal/server` (не `cmd/server`).
+- Control plane persistence: `internal/controlplane/infrastructure/{auth,eventstore,delivery}`.
+- HTTP API: пакет `httpapi`, путь `internal/controlplane/http`.
+- Middleware: только `internal/middleware`.
+- Postgres DSN в Makefile: `127.0.0.1`, не `localhost` (IPv6 на Windows/WSL).
+- Партиционированная `events`: глобальная дедупликация через `event_dedup`, не `UNIQUE INDEX ON events(id)`.
+
+## Правило
+
+Не оставлять «потом поправим» — обновляй все связанные места в том же PR/задаче.

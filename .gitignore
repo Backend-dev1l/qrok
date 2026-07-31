@@ -1,0 +1,8 @@
+/bin/
+*.test
+*.out
+coverage.html
+report.json
+.env
+qrok.yaml
+dist/

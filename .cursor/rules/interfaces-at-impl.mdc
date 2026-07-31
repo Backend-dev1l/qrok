@@ -1,0 +1,26 @@
+---
+description: Интерфейсы объявляем рядом с реализацией, не в отдельных пакетах-заглушках
+alwaysApply: true
+---
+
+# Интерфейсы рядом с реализацией
+
+Не создавать пакеты, в которых лежит только интерфейс (`sink/sink.go`, `bus/bus.go`).
+
+## Правило
+
+1. **Интерфейс + реализация** — в одном пакете реализации (`internal/devcli/sink/http`, `internal/bus/inproc`, `internal/agent/source/kafka`).
+2. **Реализация** — неэкспортируемый тип (`Client`, `client`, `Bus`), **интерфейс** — экспортируемый контракт (`Sink`, `Source`, `EventBus`).
+3. **Конструктор** возвращает интерфейс: `func New(...) Sink`.
+4. **Общие типы данных** (не интерфейсы) — отдельный минимальный пакет без контрактов, например `internal/agent/source/event.go` для `Event`.
+5. **Исключение**: интерфейс у потребителя, если нужно избежать циклического импорта — редкий случай, явно обосновать в PR.
+
+## Примеры в qrok
+
+| Было (плохо) | Стало (хорошо) |
+|--------------|----------------|
+| `devcli/sink/sink.go` + `sink/http/` | `Sink` interface в `sink/http/sink.go` |
+| `bus/bus.go` + `bus/inproc/` | `EventBus` в `bus/inproc/bus.go` |
+| `agent/source/source.go` + `kafka/` | `Source` в `kafka/kafka.go`, `Event` в `source/event.go` |
+
+При добавлении новой реализации (stdout, rabbitmq) — свой пакет со своим интерфейсом, без общего `interfaces.go` наверху.

@@ -1,0 +1,22 @@
+# Конфиг агента qrok. Скопируйте в qrok-agent.yaml или укажите --config.
+# После make seed-dev подставьте выданный token и tunnel_id.
+
+log:
+  level: info
+  format: pretty
+
+agent:
+  token: "qrok_agt_1A6bu2ismotVo3ADnOf1ibXVniyoDmJKjj9dS7_vt4k" # qrok_agt_... (make seed-dev)
+  tunnel_id: dev-tunnel # dev-tunnel (make seed-dev)
+  gateway: localhost:9090
+  source_type: kafka
+  topics:
+    - demo
+
+kafka:
+  brokers:
+    - localhost:9092
+  start_from_oldest: true # для первого прогона: прочитать уже существующие сообщения
+
+events:
+  max_payload_bytes: 1048576

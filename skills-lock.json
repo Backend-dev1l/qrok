@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "skills": {
+    "effective-go": {
+      "source": "kubearchive/kubearchive",
+      "sourceType": "github",
+      "skillPath": "skills/effective-go/SKILL.md",
+      "computedHash": "25752b8e80a9af34e9fddcdcc7432acdb6119bf1638c58a21d7a197502160a26"
+    },
+    "go-backend-microservices": {
+      "source": "mindrally/skills",
+      "sourceType": "github",
+      "skillPath": "go-backend-microservices/SKILL.md",
+      "computedHash": "cd9c5afc21037aa7fba44f27f78fad2cbb4e371915f500be586550be3cdf064d"
+    },
+    "kafka-development": {
+      "source": "mindrally/skills",
+      "sourceType": "github",
+      "skillPath": "kafka-development/SKILL.md",
+      "computedHash": "499e177c28a229509dba547e1370ed856d55e5356501ad40fdbf14389bdbc3f3"
+    },
+    "rabbitmq-development": {
+      "source": "mindrally/skills",
+      "sourceType": "github",
+      "skillPath": "rabbitmq-development/SKILL.md",
+      "computedHash": "a69858c6838684f2d951647eba1e76d9d712b8a4394faa22494defe6415d619d"
+    }
+  }
+}

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>qrok — события</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; padding: 1.5rem; max-width: 1100px; }
+    h1 { margin-top: 0; font-size: 1.4rem; }
+    .toolbar { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+    input, button { font: inherit; padding: .4rem .6rem; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: .5rem; border-bottom: 1px solid #ccc3; }
+    tr:hover { background: #8881; cursor: pointer; }
+    pre { background: #8881; padding: .75rem; overflow: auto; font-size: .85rem; }
+    .status { margin: .5rem 0; min-height: 1.2rem; color: #666; }
+    .error { color: #c00; }
+    .ok { color: #080; }
+    .badge { display: inline-block; padding: .1rem .45rem; border-radius: .25rem; font-size: .8rem; font-weight: 600; }
+    .badge-delivered { background: #0a03; color: #080; }
+    .badge-failed { background: #a003; color: #c00; }
+    .badge-pending { background: #8803; color: #a60; }
+    .badge-none { color: #888; font-weight: normal; }
+    .deliveries { margin-top: 1rem; }
+    .deliveries table { font-size: .9rem; }
+  </style>
+</head>
+<body>
+  <h1>qrok — лента событий</h1>
+  <p><a href="/dashboard/device">Вход dev-клиента (qrok login)</a></p>
+  <div class="toolbar">
+    <label>Tunnel ID <input id="tunnel" value="dev-tunnel" size="24"></label>
+    <button id="refresh" type="button">Обновить</button>
+    <button id="replay" type="button" disabled>Replay</button>
+  </div>
+  <div id="status" class="status"></div>
+  <table>
+    <thead>
+      <tr><th>ID</th><th>Topic</th><th>Size</th><th>Delivery</th><th>Created</th><th>Replay</th></tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <h2>Детали</h2>
+  <pre id="details">Выберите событие в таблице</pre>
+  <div id="deliveries" class="deliveries" hidden>
+    <h3>Доставки</h3>
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Kind</th><th>Status</th><th>HTTP</th><th>Error</th><th>Latency</th><th>Time</th></tr>
+      </thead>
+      <tbody id="delivery-rows"></tbody>
+    </table>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

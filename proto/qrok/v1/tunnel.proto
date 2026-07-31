@@ -1,0 +1,94 @@
+syntax = "proto3";
+
+package qrok.v1;
+
+option go_package = "qrok/internal/proto/qrok/v1;qrokv1";
+
+// TunnelService — транспорт туннеля между агентом/dev-клиентом и облаком.
+// Аутентификация — токен в gRPC-metadata (authorization: Bearer <token>).
+service TunnelService {
+  // AgentStream: агент шлёт события со стейджинга, сервер подтверждает Ack'ами.
+  // Агент коммитит оффсет в брокере только после получения Ack.
+  rpc AgentStream(stream AgentStreamRequest) returns (stream AgentStreamResponse);
+
+  // ListenStream: dev-клиент объявляет подписку, сервер пушит события;
+  // клиент отвечает DeliveryResult'ами о доставке на localhost.
+  rpc ListenStream(stream ListenStreamRequest) returns (stream ListenStreamResponse);
+}
+
+message AgentStreamRequest {
+  oneof msg {
+    AgentHello hello = 1; // первое сообщение стрима
+    EventEnvelope event = 2;
+  }
+}
+
+message AgentStreamResponse {
+  oneof msg {
+    Ack ack = 1;
+    Goaway goaway = 2;
+  }
+}
+
+message ListenStreamRequest {
+  oneof msg {
+    Subscribe subscribe = 1; // первое сообщение стрима
+    DeliveryResult delivery_result = 2;
+  }
+}
+
+message ListenStreamResponse {
+  oneof msg {
+    EventEnvelope event = 1;
+    Goaway goaway = 2;
+  }
+}
+
+message AgentHello {
+  string tunnel_id = 1;
+  string agent_version = 2;
+  string source_type = 3; // kafka | rabbitmq
+  repeated string topics = 4;
+}
+
+message Subscribe {
+  string tunnel_id = 1;
+  repeated string topics = 2; // пусто = все топики туннеля
+  map<string, string> header_filters = 3;
+  bool catch_up = 4; // доставить накопленные offline-доставки
+}
+
+// EventEnvelope — единица данных туннеля.
+// Инвариант: заполнено ровно одно из payload / payload_ref
+// (payload_ref используется при размере >= порога, по умолчанию 256 КБ).
+message EventEnvelope {
+  string event_id = 1; // ULID, генерирует агент — ключ идемпотентности
+  string tunnel_id = 2;
+  string source_type = 3; // kafka | rabbitmq
+  string topic = 4;
+  bytes key = 5;
+  map<string, string> headers = 6;
+  bytes payload = 7;
+  string payload_ref = 8; // ключ объекта в object store
+  int32 partition = 9;
+  int64 offset = 10;
+  int64 broker_ts_ms = 11;
+  bool is_replay = 12;
+}
+
+message Ack {
+  string event_id = 1;
+}
+
+message DeliveryResult {
+  string event_id = 1;
+  string delivery_id = 2;
+  int32 status_code = 3; // HTTP-код localhost'а или 0, если доставка не удалась
+  string error = 4;
+  int64 latency_ms = 5;
+}
+
+// Goaway — сигнал graceful drain: клиент должен переподключиться к другому инстансу.
+message Goaway {
+  string reason = 1;
+}

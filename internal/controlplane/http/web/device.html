@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>qrok — вход dev-клиента</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; padding: 1.5rem; max-width: 480px; }
+    h1 { margin-top: 0; font-size: 1.4rem; }
+    label { display: block; margin: .75rem 0 .25rem; }
+    input { font: inherit; padding: .4rem .6rem; width: 100%; box-sizing: border-box; }
+    button { font: inherit; padding: .5rem 1rem; margin-top: 1rem; }
+    .status { margin: 1rem 0; min-height: 1.2rem; }
+    .error { color: #c00; }
+    .ok { color: #080; }
+    a { color: inherit; }
+  </style>
+</head>
+<body>
+  <h1>qrok — подтверждение входа</h1>
+  <p>Введите код из терминала (<code>qrok login</code>) и project_id из <code>make seed-dev</code>.</p>
+  <label>User code <input id="user-code" placeholder="ABCD-EFGH" autocomplete="off"></label>
+  <label>Project ID <input id="project-id" value="01DEVPRJ000000000000000000" size="32"></label>
+  <button id="approve" type="button">Подтвердить</button>
+  <div id="status" class="status"></div>
+  <p><a href="/dashboard/">← к ленте событий</a></p>
+  <script src="/dashboard/device.js"></script>
+</body>
+</html>
