@@ -67,13 +67,13 @@ var _ Source = (*client)(nil)
 func New(cfg Config) (Source, error) {
 	if len(cfg.Brokers) == 0 {
 		return nil, fault.ErrValidation.
-			New("не указаны адреса брокеров Kafka").
+			New("Kafka broker addresses are not set").
 			WithOp("agent.kafka.new").
-			WithHint("укажите brokers в конфиге агента, например [\"localhost:9092\"]")
+			WithHint("set brokers in agent config, e.g. [\"localhost:9092\"]")
 	}
 	if cfg.TunnelID == "" && cfg.GroupID == "" {
 		return nil, fault.ErrValidation.
-			New("нужен tunnel_id или явный group_id для consumer group").
+			New("tunnel_id or explicit group_id required for consumer group").
 			WithOp("agent.kafka.new")
 	}
 	return &client{cfg: cfg}, nil
@@ -82,7 +82,7 @@ func New(cfg Config) (Source, error) {
 func (c *client) Subscribe(ctx context.Context, topics []string, out chan<- *source.Event) error {
 	if len(topics) == 0 {
 		return fault.ErrValidation.
-			New("не указаны топики для подписки").
+			New("no topics configured for subscription").
 			WithOp("agent.kafka.subscribe")
 	}
 
@@ -98,9 +98,9 @@ func (c *client) Subscribe(ctx context.Context, topics []string, out chan<- *sou
 				return nil // отмена контекста — штатное завершение
 			}
 			return fault.ErrServiceUnavail.
-				Wrap(err, "не удалось прочитать сообщение из Kafka").
+				Wrap(err, "failed to read message from Kafka").
 				WithOp("agent.kafka.fetch").
-				WithHint("проверьте доступность брокеров и права на топики").
+				WithHint("check broker availability and topic permissions").
 				WithArg("group_id", c.cfg.groupID())
 		}
 
@@ -118,9 +118,9 @@ func (c *client) startReader(topics []string) (*kafkago.Reader, error) {
 
 	if c.reader != nil {
 		return nil, fault.ErrConflict.
-			New("подписка уже активна").
+			New("subscription already active").
 			WithOp("agent.kafka.subscribe").
-			WithHint("один Source — одна подписка; создайте новый Source")
+			WithHint("one Source allows one subscription; create a new Source")
 	}
 
 	startOffset := kafkago.LastOffset
@@ -160,7 +160,7 @@ func (c *client) Ack(ctx context.Context, ev *source.Event) error {
 	})
 	if err != nil {
 		return fault.ErrServiceUnavail.
-			Wrap(err, "не удалось закоммитить оффсет").
+			Wrap(err, "failed to commit offset").
 			WithOp("agent.kafka.ack").
 			WithArg("topic", ev.Topic).
 			WithArg("offset", fmt.Sprintf("%d", ev.Offset))
@@ -179,7 +179,7 @@ func (c *client) Close() error {
 	}
 	if err := reader.Close(); err != nil {
 		return fault.ErrInternal.
-			Wrap(err, "ошибка закрытия Kafka-ридера").
+			Wrap(err, "Kafka reader close error").
 			WithOp("agent.kafka.close")
 	}
 	return nil

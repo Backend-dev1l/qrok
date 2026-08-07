@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"qrok/internal/controlplane/model"
+	"qrok/internal/controlplane/infrastructure/models"
 	"qrok/internal/controlplane/service"
 	"qrok/pkg/fault"
 )
@@ -18,14 +18,14 @@ func TestEventService(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	allowAll := &model.Subject{AllowAll: true}
-	scoped := &model.Subject{ProjectID: "prj-1"}
+	allowAll := &models.Subject{AllowAll: true}
+	scoped := &models.Subject{ProjectID: "prj-1"}
 
 	t.Run("list_events_success", func(t *testing.T) {
 		t.Parallel()
 
 		repo := newFakeEventRepo()
-		repo.events["ev-1"] = &model.Event{ID: "ev-1", TunnelID: "tunnel-1", Topic: "orders"}
+		repo.events["ev-1"] = &models.Event{ID: "ev-1", TunnelID: "tunnel-1", Topic: "orders"}
 
 		svc := service.NewEventService(repo, &fakeDeliveryRepo{}, newFakeAuthRepo())
 		items, err := svc.ListEvents(ctx, allowAll, "tunnel-1", 10)
@@ -74,7 +74,7 @@ func TestEventService(t *testing.T) {
 		repo := newFakeEventRepo()
 		for i := range 60 {
 			id := fmt.Sprintf("ev-%02d", i)
-			repo.events[id] = &model.Event{ID: id, TunnelID: "tunnel-1", Topic: "t"}
+			repo.events[id] = &models.Event{ID: id, TunnelID: "tunnel-1", Topic: "t"}
 		}
 
 		svc := service.NewEventService(repo, &fakeDeliveryRepo{}, newFakeAuthRepo())
@@ -88,7 +88,7 @@ func TestEventService(t *testing.T) {
 		t.Parallel()
 
 		repo := newFakeEventRepo()
-		repo.events["ev-1"] = &model.Event{
+		repo.events["ev-1"] = &models.Event{
 			ID:       "ev-1",
 			TunnelID: "tunnel-1",
 			Topic:    "orders",
@@ -133,7 +133,7 @@ func TestEventService(t *testing.T) {
 		repo := newFakeEventRepo()
 		svc := service.NewEventService(repo, &fakeDeliveryRepo{}, newFakeAuthRepo())
 
-		inserted, err := svc.Ingest(ctx, allowAll, &model.Event{
+		inserted, err := svc.Ingest(ctx, allowAll, &models.Event{
 			ID:       "ev-new",
 			TunnelID: "tunnel-1",
 			Topic:    "orders",
@@ -149,12 +149,12 @@ func TestEventService(t *testing.T) {
 		t.Parallel()
 
 		repo := newFakeEventRepo()
-		repo.events["ev-dup"] = &model.Event{
+		repo.events["ev-dup"] = &models.Event{
 			ID: "ev-dup", TunnelID: "tunnel-1", Topic: "t", Payload: []byte("x"),
 		}
 
 		svc := service.NewEventService(repo, &fakeDeliveryRepo{}, newFakeAuthRepo())
-		inserted, err := svc.Ingest(ctx, allowAll, &model.Event{
+		inserted, err := svc.Ingest(ctx, allowAll, &models.Event{
 			ID: "ev-dup", TunnelID: "tunnel-1", Topic: "t", Payload: []byte("y"),
 		}, 1024)
 
@@ -166,7 +166,7 @@ func TestEventService(t *testing.T) {
 		t.Parallel()
 
 		svc := service.NewEventService(newFakeEventRepo(), &fakeDeliveryRepo{}, newFakeAuthRepo())
-		_, err := svc.Ingest(ctx, allowAll, &model.Event{
+		_, err := svc.Ingest(ctx, allowAll, &models.Event{
 			ID: "ev-1", TunnelID: "tunnel-1", Topic: "t",
 		}, 1024)
 
@@ -178,7 +178,7 @@ func TestEventService(t *testing.T) {
 		t.Parallel()
 
 		svc := service.NewEventService(newFakeEventRepo(), &fakeDeliveryRepo{}, newFakeAuthRepo())
-		_, err := svc.Ingest(ctx, allowAll, &model.Event{
+		_, err := svc.Ingest(ctx, allowAll, &models.Event{
 			ID: "ev-1", TunnelID: "tunnel-1", Topic: "t", Payload: []byte("big"),
 		}, 1)
 
@@ -190,10 +190,10 @@ func TestEventService(t *testing.T) {
 		t.Parallel()
 
 		svc := service.NewEventService(newFakeEventRepo(), &fakeDeliveryRepo{}, newFakeAuthRepo())
-		_, err := svc.Ingest(ctx, &model.Subject{
+		_, err := svc.Ingest(ctx, &models.Subject{
 			TunnelID:  "tunnel-a",
 			ProjectID: "prj-1",
-		}, &model.Event{
+		}, &models.Event{
 			ID: "ev-1", TunnelID: "tunnel-b", Topic: "t", Payload: []byte("x"),
 		}, 1024)
 
@@ -205,13 +205,13 @@ func TestEventService(t *testing.T) {
 		t.Parallel()
 
 		events := newFakeEventRepo()
-		events.events["ev-1"] = &model.Event{
+		events.events["ev-1"] = &models.Event{
 			ID: "ev-1", TunnelID: "tunnel-1", Topic: "orders", Payload: []byte("x"),
 		}
 		deliveries := &fakeDeliveryRepo{}
-		deliveries.upserted = []*model.Delivery{{
-			ID: "del-1", EventID: "ev-1", Kind: model.DeliveryKindLive,
-			Status: model.DeliveryStatusFailed, Error: "connection refused",
+		deliveries.upserted = []*models.Delivery{{
+			ID: "del-1", EventID: "ev-1", Kind: models.DeliveryKindLive,
+			Status: models.DeliveryStatusFailed, Error: "connection refused",
 		}}
 
 		svc := service.NewEventService(events, deliveries, newFakeAuthRepo())
@@ -219,17 +219,17 @@ func TestEventService(t *testing.T) {
 
 		require.NoError(t, err)
 		require.Len(t, view.Deliveries, 1)
-		assert.Equal(t, model.DeliveryStatusFailed, view.Deliveries[0].Status)
+		assert.Equal(t, models.DeliveryStatusFailed, view.Deliveries[0].Status)
 	})
 
 	t.Run("list_events_includes_latest_delivery", func(t *testing.T) {
 		t.Parallel()
 
 		events := newFakeEventRepo()
-		events.events["ev-1"] = &model.Event{ID: "ev-1", TunnelID: "tunnel-1", Topic: "t"}
+		events.events["ev-1"] = &models.Event{ID: "ev-1", TunnelID: "tunnel-1", Topic: "t"}
 		deliveries := &fakeDeliveryRepo{}
-		deliveries.upserted = []*model.Delivery{{
-			ID: "del-1", EventID: "ev-1", Kind: model.DeliveryKindLive, Status: model.DeliveryStatusDelivered,
+		deliveries.upserted = []*models.Delivery{{
+			ID: "del-1", EventID: "ev-1", Kind: models.DeliveryKindLive, Status: models.DeliveryStatusDelivered,
 		}}
 
 		svc := service.NewEventService(events, deliveries, newFakeAuthRepo())
@@ -238,7 +238,7 @@ func TestEventService(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, items, 1)
 		require.NotNil(t, items[0].LatestDelivery)
-		assert.Equal(t, model.DeliveryStatusDelivered, items[0].LatestDelivery.Status)
+		assert.Equal(t, models.DeliveryStatusDelivered, items[0].LatestDelivery.Status)
 	})
 
 	t.Run("ingest_sets_created_at", func(t *testing.T) {
@@ -248,7 +248,7 @@ func TestEventService(t *testing.T) {
 		svc := service.NewEventService(repo, &fakeDeliveryRepo{}, newFakeAuthRepo())
 		before := time.Now().UTC()
 
-		_, err := svc.Ingest(ctx, allowAll, &model.Event{
+		_, err := svc.Ingest(ctx, allowAll, &models.Event{
 			ID: "ev-ts", TunnelID: "tunnel-1", Topic: "t", Payload: []byte("x"),
 		}, 0)
 

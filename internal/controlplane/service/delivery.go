@@ -4,12 +4,12 @@ import (
 	"context"
 
 	"qrok/internal/controlplane/infrastructure/delivery"
-	"qrok/internal/controlplane/model"
+	"qrok/internal/controlplane/infrastructure/models"
 )
 
 // DeliveryService records delivery results from dev clients.
 type DeliveryService interface {
-	RecordResult(ctx context.Context, result *model.DeliveryResult) error
+	RecordResult(ctx context.Context, result *models.DeliveryResult) error
 }
 
 type deliveryService struct {
@@ -20,22 +20,22 @@ func NewDeliveryService(repo delivery.Repository) DeliveryService {
 	return &deliveryService{repo: repo}
 }
 
-func (s *deliveryService) RecordResult(ctx context.Context, result *model.DeliveryResult) error {
+func (s *deliveryService) RecordResult(ctx context.Context, result *models.DeliveryResult) error {
 	const op = "delivery.record_result"
 	if result == nil || result.DeliveryID == "" || result.EventID == "" {
-		return validationErr(op, "неполный DeliveryResult")
+		return validationErr(op, "incomplete DeliveryResult")
 	}
 
-	status := model.DeliveryStatusDelivered
+	status := models.DeliveryStatusDelivered
 	if result.Error != "" || result.StatusCode < 200 || result.StatusCode >= 300 {
-		status = model.DeliveryStatusFailed
+		status = models.DeliveryStatusFailed
 	}
 
-	rec := &model.Delivery{
+	rec := &models.Delivery{
 		ID:       result.DeliveryID,
 		EventID:  result.EventID,
 		TargetID: "*",
-		Kind:     model.DeliveryKindLive,
+		Kind:     models.DeliveryKindLive,
 		Status:   status,
 		Error:    result.Error,
 	}

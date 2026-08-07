@@ -12,7 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"qrok/internal/config"
-	"qrok/internal/controlplane/model"
+	"qrok/internal/controlplane/infrastructure/models"
 	"qrok/internal/controlplane/service"
 	"qrok/internal/middleware"
 	"qrok/pkg/fault"
@@ -81,7 +81,7 @@ func listEvents(deps Deps) http.HandlerFunc {
 		if raw := r.URL.Query().Get("limit"); raw != "" {
 			n, err := strconv.Atoi(raw)
 			if err != nil || n <= 0 || n > 200 {
-				fault.WriteHTTPError(r.Context(), w, fault.ErrBadRequest.New("limit: ожидается 1..200").WithOp("httpapi.list_events"))
+				fault.WriteHTTPError(r.Context(), w, fault.ErrBadRequest.New("limit: expected 1..200").WithOp("httpapi.list_events"))
 				return
 			}
 			limit = n
@@ -130,7 +130,7 @@ func getEvent(deps Deps) http.HandlerFunc {
 func replayEvent(deps Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if deps.Replay == nil {
-			fault.WriteHTTPError(r.Context(), w, fault.ErrInternal.New("replay не настроен").WithOp("httpapi.replay"))
+			fault.WriteHTTPError(r.Context(), w, fault.ErrInternal.New("replay is not configured").WithOp("httpapi.replay"))
 			return
 		}
 
@@ -142,7 +142,7 @@ func replayEvent(deps Deps) http.HandlerFunc {
 		}
 		if r.Body != nil && r.ContentLength != 0 {
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				fault.WriteHTTPError(r.Context(), w, fault.ErrBadRequest.Wrap(err, "невалидный JSON").WithOp("httpapi.replay"))
+				fault.WriteHTTPError(r.Context(), w, fault.ErrBadRequest.Wrap(err, "invalid JSON").WithOp("httpapi.replay"))
 				return
 			}
 		}
@@ -186,7 +186,7 @@ type eventJSON struct {
 	Deliveries      []deliveryJSON    `json:"deliveries,omitempty"`
 }
 
-func toDeliveryJSON(rec *model.Delivery) *deliveryJSON {
+func toDeliveryJSON(rec *models.Delivery) *deliveryJSON {
 	if rec == nil {
 		return nil
 	}
@@ -201,7 +201,7 @@ func toDeliveryJSON(rec *model.Delivery) *deliveryJSON {
 	}
 }
 
-func toEventJSON(ev *model.Event, payload, encoding string, latest *model.Delivery, all []*model.Delivery) eventJSON {
+func toEventJSON(ev *models.Event, payload, encoding string, latest *models.Delivery, all []*models.Delivery) eventJSON {
 	out := eventJSON{
 		ID:              ev.ID,
 		TunnelID:        ev.TunnelID,

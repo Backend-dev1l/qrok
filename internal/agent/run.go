@@ -80,7 +80,7 @@ func Run(ctx context.Context, cfg *config.Agent, log *slog.Logger) error {
 						return nil
 					}
 					if int64(len(ev.Payload)) > cfg.Events.MaxPayloadBytes {
-						log.Warn("событие пропущено: превышен max_payload_bytes",
+						log.Warn("event skipped: max_payload_bytes exceeded",
 							"topic", ev.Topic, "offset", ev.Offset, "size", len(ev.Payload))
 						continue
 					}
@@ -99,7 +99,7 @@ func Run(ctx context.Context, cfg *config.Agent, log *slog.Logger) error {
 					if err := src.Ack(ctx, ev); err != nil {
 						return err
 					}
-					log.Debug("событие доставлено в облако",
+					log.Debug("event delivered to cloud",
 						"event_id", eventID, "topic", ev.Topic, "offset", ev.Offset)
 				}
 			}
@@ -113,7 +113,7 @@ func Run(ctx context.Context, cfg *config.Agent, log *slog.Logger) error {
 			continue
 		}
 
-		log.Warn("сессия агента прервана, реконнект",
+		log.Warn("agent session interrupted, reconnecting",
 			"error", sessionErr.Error(), "backoff", backoff.String())
 
 		if !fault.IsRetryable(sessionErr) {

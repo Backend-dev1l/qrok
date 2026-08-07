@@ -86,12 +86,12 @@ func TestKafkaAgentGatewayListenLocalhost(t *testing.T) {
 		default:
 			return false
 		}
-	}, 60*time.Second, 200*time.Millisecond, "событие не дошло до localhost")
+	}, 60*time.Second, 200*time.Millisecond, "event did not reach localhost")
 
 	require.Eventually(t, func() bool {
 		events, err := stack.EventRepo.ListByTunnel(ctx, tunnelID, 10)
 		return err == nil && len(events) >= 1
-	}, 10*time.Second, 200*time.Millisecond, "событие не сохранилось в eventstore")
+	}, 10*time.Second, 200*time.Millisecond, "event was not saved to eventstore")
 
 	cancel()
 	<-listenDone

@@ -27,7 +27,7 @@ func newReplayCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			eventID := strings.TrimSpace(args[0])
 			if eventID == "" {
-				return fault.ErrValidation.New("event_id обязателен").WithOp("cli.replay")
+				return fault.ErrValidation.New("event_id is required").WithOp("cli.replay")
 			}
 
 			body := map[string]string{}
@@ -36,7 +36,7 @@ func newReplayCmd() *cobra.Command {
 			}
 			raw, err := json.Marshal(body)
 			if err != nil {
-				return fault.ErrInternal.Wrap(err, "не удалось собрать запрос").WithOp("cli.replay")
+				return fault.ErrInternal.Wrap(err, "failed to build request").WithOp("cli.replay")
 			}
 
 			url := strings.TrimRight(apiURL, "/") + "/api/v1/events/" + eventID + "/replay"
@@ -45,13 +45,13 @@ func newReplayCmd() *cobra.Command {
 
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(raw))
 			if err != nil {
-				return fault.ErrInternal.Wrap(err, "не удалось создать запрос").WithOp("cli.replay")
+				return fault.ErrInternal.Wrap(err, "failed to create request").WithOp("cli.replay")
 			}
 			req.Header.Set("Content-Type", "application/json")
 
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
-				return fault.ErrServiceUnavail.Wrap(err, "не удалось вызвать API").WithOp("cli.replay")
+				return fault.ErrServiceUnavail.Wrap(err, "failed to call API").WithOp("cli.replay")
 			}
 			defer resp.Body.Close()
 
@@ -69,7 +69,7 @@ func newReplayCmd() *cobra.Command {
 				Status     string `json:"status"`
 			}
 			if err := json.Unmarshal(respBody, &result); err != nil {
-				return fault.ErrInternal.Wrap(err, "не удалось разобрать ответ API").WithOp("cli.replay")
+				return fault.ErrInternal.Wrap(err, "failed to parse API response").WithOp("cli.replay")
 			}
 
 			fmt.Fprintf(os.Stdout, "replay поставлен: delivery_id=%s event_id=%s target=%s status=%s\n",

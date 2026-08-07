@@ -30,7 +30,7 @@ func newLoginCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			apiURL = strings.TrimRight(apiURL, "/")
 			if apiURL == "" {
-				return fault.ErrValidation.New("укажите --api URL control plane").WithOp("cli.login")
+				return fault.ErrValidation.New("specify --api control plane URL").WithOp("cli.login")
 			}
 
 			ctx, cancel := context.WithTimeout(cmd.Context(), 15*time.Minute)
@@ -42,18 +42,18 @@ func newLoginCmd() *cobra.Command {
 			}
 			raw, err := json.Marshal(startBody)
 			if err != nil {
-				return fault.ErrInternal.Wrap(err, "не удалось собрать запрос").WithOp("cli.login")
+				return fault.ErrInternal.Wrap(err, "failed to build request").WithOp("cli.login")
 			}
 
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL+"/api/v1/oauth/device/code", bytes.NewReader(raw))
 			if err != nil {
-				return fault.ErrInternal.Wrap(err, "не удалось создать запрос").WithOp("cli.login")
+				return fault.ErrInternal.Wrap(err, "failed to create request").WithOp("cli.login")
 			}
 			req.Header.Set("Content-Type", "application/json")
 
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
-				return fault.ErrServiceUnavail.Wrap(err, "не удалось вызвать API").WithOp("cli.login")
+				return fault.ErrServiceUnavail.Wrap(err, "failed to call API").WithOp("cli.login")
 			}
 			defer resp.Body.Close()
 
@@ -72,7 +72,7 @@ func newLoginCmd() *cobra.Command {
 				Interval        int    `json:"interval"`
 			}
 			if err := json.Unmarshal(startPayload, &start); err != nil {
-				return fault.ErrInternal.Wrap(err, "не удалось разобрать ответ API").WithOp("cli.login")
+				return fault.ErrInternal.Wrap(err, "failed to parse API response").WithOp("cli.login")
 			}
 
 			interval := time.Duration(start.Interval) * time.Second
@@ -80,14 +80,14 @@ func newLoginCmd() *cobra.Command {
 				interval = 5 * time.Second
 			}
 
-			fmt.Fprintf(os.Stdout, "Откройте в браузере: %s\n", start.VerificationURI)
-			fmt.Fprintf(os.Stdout, "Код подтверждения: %s\n", start.UserCode)
+			fmt.Fprintf(os.Stdout, "Open in browser: %s\n", start.VerificationURI)
+			fmt.Fprintf(os.Stdout, "Verification code: %s\n", start.UserCode)
 			if projectID != "" {
 				fmt.Fprintf(os.Stdout, "Project ID: %s\n", projectID)
 			} else {
-				fmt.Fprintln(os.Stdout, "На странице укажите project_id (из make seed-dev).")
+				fmt.Fprintln(os.Stdout, "On the page enter project_id (from make seed-dev).")
 			}
-			fmt.Fprintln(os.Stdout, "Ожидание подтверждения…")
+			fmt.Fprintln(os.Stdout, "Waiting for approval…")
 
 			tokenBody, _ := json.Marshal(map[string]string{"device_code": start.DeviceCode})
 			pollURL := apiURL + "/api/v1/oauth/device/token"
@@ -95,7 +95,7 @@ func newLoginCmd() *cobra.Command {
 			for {
 				select {
 				case <-ctx.Done():
-					return fault.ErrTimeout.Wrap(ctx.Err(), "таймаут ожидания подтверждения").WithOp("cli.login")
+					return fault.ErrTimeout.Wrap(ctx.Err(), "approval wait timed out").WithOp("cli.login")
 				default:
 				}
 
@@ -103,13 +103,13 @@ func newLoginCmd() *cobra.Command {
 
 				pollReq, err := http.NewRequestWithContext(ctx, http.MethodPost, pollURL, bytes.NewReader(tokenBody))
 				if err != nil {
-					return fault.ErrInternal.Wrap(err, "не удалось создать poll-запрос").WithOp("cli.login")
+					return fault.ErrInternal.Wrap(err, "failed to create poll request").WithOp("cli.login")
 				}
 				pollReq.Header.Set("Content-Type", "application/json")
 
 				pollResp, err := http.DefaultClient.Do(pollReq)
 				if err != nil {
-					return fault.ErrServiceUnavail.Wrap(err, "ошибка poll API").WithOp("cli.login")
+					return fault.ErrServiceUnavail.Wrap(err, "poll API error").WithOp("cli.login")
 				}
 
 				pollPayload, _ := io.ReadAll(pollResp.Body)
@@ -132,8 +132,8 @@ func newLoginCmd() *cobra.Command {
 						return err
 					}
 					path, _ := credentials.DefaultPath()
-					fmt.Fprintf(os.Stdout, "Вход выполнен. Токен сохранён в %s\n", path)
-					fmt.Fprintln(os.Stdout, "Запустите: qrok listen --config deploy/listen.example.yaml")
+					fmt.Fprintf(os.Stdout, "Login complete. Token saved to %s\n", path)
+					fmt.Fprintln(os.Stdout, "Run: qrok listen --config deploy/listen.example.yaml")
 					return nil
 				}
 
@@ -148,7 +148,7 @@ func newLoginCmd() *cobra.Command {
 						continue
 					}
 					return fault.ErrServiceUnavail.
-						Newf("неожиданный ответ poll: HTTP %d %s", pollResp.StatusCode, string(pollPayload)).
+						Newf("unexpected poll response: HTTP %d %s", pollResp.StatusCode, string(pollPayload)).
 						WithOp("cli.login")
 				default:
 					msg := poll.Description

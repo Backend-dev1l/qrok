@@ -4,17 +4,17 @@
 
 Агент на стейджинге читает топики Kafka/RabbitMQ (собственной consumer group, не мешая боевым консьюмерам) и прокидывает события на localhost разработчика. Каждое событие сохраняется в облаке и может быть переотправлено кнопкой Replay — без повторной генерации сообщений и без риска «сжечь» их в брокере.
 
-Подробное ТЗ и архитектура: [docs/TZ.md](docs/TZ.md).
-
 ## Структура
 
 - `cmd/qrok` — CLI: `qrok agent` (стейджинг), `qrok listen` (локальная машина), `qrok login`, `qrok replay`
 - `cmd` — точка входа облачного сервера (`internal/server`)
 - `internal/server` — Tunnel Gateway + Control Plane (запуск)
 - `internal/middleware` — HTTP middleware (auth, security, cors, …)
-- `internal/controlplane/model` — доменные типы control plane (Subject, Event, Delivery, …)
+- `internal/controlplane/infrastructure/models` — доменные типы control plane (Subject, Event, Delivery, …)
 - `internal/controlplane/service` — use cases: auth, device, events, replay, delivery
 - `internal/controlplane/infrastructure` — persistence: auth, eventstore, delivery (Postgres/S3)
+- `internal/transport/http` — REST API и дашборд (пакет `httpapi`)
+- `internal/transport/grpc` — Tunnel Gateway gRPC (пакет `gateway`)
 - `pkg/fault` — единый пакет ошибок (HTTP/gRPC/CLI/slog-рендеры)
 - `pkg/logger` — настройка slog (формат, уровень, логгер в context)
 - `pkg/postgres` — подключение к PostgreSQL через pgxpool

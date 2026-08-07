@@ -18,10 +18,10 @@ func Dial(ctx context.Context, addr string) (*grpc.ClientConn, error) {
 	)
 	if err != nil {
 		return nil, fault.ErrServiceUnavail.
-			Wrap(err, "не удалось подключиться к gateway").
+			Wrap(err, "failed to connect to gateway").
 			WithOp("grpc.dial").
 			WithArg("addr", addr).
-			WithHint("проверьте, что сервер запущен (make run-server)")
+			WithHint("check that the server is running (make run-server)")
 	}
 	return conn, nil
 }

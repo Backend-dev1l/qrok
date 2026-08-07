@@ -1,5 +1,5 @@
-// Package model contains transport- and storage-independent control-plane data.
-package model
+// Package models contains transport- and storage-independent control-plane data.
+package models
 
 import "time"
 

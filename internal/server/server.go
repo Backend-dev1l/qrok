@@ -14,13 +14,13 @@ import (
 
 	"qrok/internal/bus/inproc"
 	"qrok/internal/config"
-	httpapi "qrok/internal/controlplane/http"
 	"qrok/internal/controlplane/infrastructure/auth"
-	"qrok/internal/controlplane/infrastructure/delivery"
+	delivery "qrok/internal/controlplane/infrastructure/delivery"
 	"qrok/internal/controlplane/infrastructure/eventstore"
 	"qrok/internal/controlplane/service"
-	"qrok/internal/gateway"
 	qrokv1 "qrok/internal/proto/qrok/v1"
+	gateway "qrok/internal/transport/grpc"
+	httpapi "qrok/internal/transport/http"
 	"qrok/pkg/fault"
 	"qrok/pkg/logger"
 	"qrok/pkg/objectstore"
@@ -38,7 +38,7 @@ func Run(configPath string) error {
 		Level:  cfg.Log.Level,
 		Format: cfg.Log.Format,
 	})
-	log.Info("конфиг загружен",
+	log.Info("config loaded",
 		"http_addr", cfg.HTTP.Addr,
 		"grpc_addr", cfg.GRPC.Addr,
 		"payload_threshold_bytes", cfg.Events.PayloadThresholdBytes,
@@ -88,14 +88,14 @@ func Run(configPath string) error {
 	lis, err := net.Listen("tcp", cfg.GRPC.Addr)
 	if err != nil {
 		return fault.ErrServiceUnavail.
-			Wrap(err, "не удалось открыть gRPC-порт").
+			Wrap(err, "failed to open gRPC port").
 			WithOp("server.listen").
 			WithArg("addr", cfg.GRPC.Addr)
 	}
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Info("gRPC gateway запущен", "addr", cfg.GRPC.Addr)
+		log.Info("gRPC gateway started", "addr", cfg.GRPC.Addr)
 		errCh <- grpcServer.Serve(lis)
 	}()
 
@@ -119,7 +119,7 @@ func Run(configPath string) error {
 		if dashboardLAN != "" {
 			attrs = append(attrs, "dashboard_wsl", dashboardLAN)
 		}
-		log.Info("HTTP API запущен", attrs...)
+		log.Info("HTTP API started", attrs...)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			errCh <- err
 		}
@@ -127,7 +127,7 @@ func Run(configPath string) error {
 
 	select {
 	case <-ctx.Done():
-		log.Info("остановка сервера...")
+		log.Info("shutting down server...")
 	case err := <-errCh:
 		if err != nil {
 			return fault.ErrInternal.Wrap(err, "server error").WithOp("server.run")
@@ -150,7 +150,7 @@ func Run(configPath string) error {
 		grpcServer.Stop()
 	}
 
-	log.Info("сервер остановлен")
+	log.Info("server stopped")
 	return nil
 }
 

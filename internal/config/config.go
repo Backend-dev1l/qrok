@@ -166,18 +166,18 @@ func loadFile(cfg any, path string) error {
 	}
 	if err != nil {
 		return fault.ErrValidation.
-			Wrapf(err, "не удалось прочитать файл конфига %s", path).
+			Wrapf(err, "failed to read config file %s", path).
 			WithOp("config.load").
-			WithHint("проверьте путь в --config / " + EnvConfigPath)
+			WithHint("check path in --config / " + EnvConfigPath)
 	}
 
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true) // опечатка в ключе — ошибка, а не молчаливое игнорирование
 	if err := dec.Decode(cfg); err != nil {
 		return fault.ErrValidation.
-			Wrapf(err, "невалидный YAML в %s", path).
+			Wrapf(err, "invalid YAML in %s", path).
 			WithOp("config.load").
-			WithHint("сверьте ключи с deploy/server.example.yaml")
+			WithHint("compare keys with deploy/server.example.yaml")
 	}
 	return nil
 }
@@ -227,7 +227,7 @@ func (c *Server) validate() error {
 func validationErr(msg string) error {
 	return fault.ErrValidation.New(msg).
 		WithOp("config.validate").
-		WithHint("исправьте значение в файле конфига или env")
+		WithHint("fix value in config file or env")
 }
 
 func envStr(key string, dst *string) {

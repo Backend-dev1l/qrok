@@ -30,7 +30,7 @@ func newListenCmd() *cobra.Command {
 				Level:  cfg.Log.Level,
 				Format: cfg.Log.Format,
 			})
-			log.Info("запуск dev-клиента",
+			log.Info("starting dev client",
 				"tunnel_id", cfg.Listen.TunnelID,
 				"gateway", cfg.Listen.Gateway,
 				"forward", cfg.Listen.Forward,
@@ -42,7 +42,7 @@ func newListenCmd() *cobra.Command {
 			if err := devcli.Run(ctx, cfg, log); err != nil {
 				return err
 			}
-			fmt.Println("dev-клиент остановлен")
+			fmt.Println("dev client stopped")
 			return nil
 		},
 	}

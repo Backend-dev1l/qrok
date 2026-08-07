@@ -7,28 +7,28 @@ import (
 	"qrok/internal/controlplane/infrastructure/auth"
 	"qrok/internal/controlplane/infrastructure/delivery"
 	"qrok/internal/controlplane/infrastructure/eventstore"
-	"qrok/internal/controlplane/model"
+	"qrok/internal/controlplane/infrastructure/models"
 )
 
 // EventView is an event with optional inline payload for API responses.
 type EventView struct {
-	Event          *model.Event
+	Event          *models.Event
 	Payload        []byte
 	HasFullPayload bool
-	Deliveries     []*model.Delivery
+	Deliveries     []*models.Delivery
 }
 
 // EventListItem is an event row with optional latest delivery status.
 type EventListItem struct {
-	Event          *model.Event
-	LatestDelivery *model.Delivery
+	Event          *models.Event
+	LatestDelivery *models.Delivery
 }
 
 // EventService handles event queries and ingestion.
 type EventService interface {
-	ListEvents(ctx context.Context, subject *model.Subject, tunnelID string, limit int) ([]*EventListItem, error)
-	GetEvent(ctx context.Context, subject *model.Subject, eventID string) (*EventView, error)
-	Ingest(ctx context.Context, subject *model.Subject, ev *model.Event, maxPayloadBytes int64) (inserted bool, err error)
+	ListEvents(ctx context.Context, subject *models.Subject, tunnelID string, limit int) ([]*EventListItem, error)
+	GetEvent(ctx context.Context, subject *models.Subject, eventID string) (*EventView, error)
+	Ingest(ctx context.Context, subject *models.Subject, ev *models.Event, maxPayloadBytes int64) (inserted bool, err error)
 }
 
 type eventService struct {
@@ -41,16 +41,16 @@ func NewEventService(events eventstore.Repository, deliveries delivery.Repositor
 	return &eventService{events: events, deliveries: deliveries, auth: authRepo}
 }
 
-func (s *eventService) ListEvents(ctx context.Context, subject *model.Subject, tunnelID string, limit int) ([]*EventListItem, error) {
+func (s *eventService) ListEvents(ctx context.Context, subject *models.Subject, tunnelID string, limit int) ([]*EventListItem, error) {
 	const op = "event.list"
 	if tunnelID == "" {
-		return nil, validationErr(op, "tunnel_id обязателен")
+		return nil, validationErr(op, "tunnel_id is required")
 	}
 	if limit <= 0 {
 		limit = 50
 	}
 	if limit > 200 {
-		return nil, validationErr(op, "limit: ожидается 1..200")
+		return nil, validationErr(op, "limit: expected 1..200")
 	}
 	if err := authorizeTunnel(ctx, s.auth, subject, tunnelID); err != nil {
 		return nil, err
@@ -80,17 +80,17 @@ func (s *eventService) ListEvents(ctx context.Context, subject *model.Subject, t
 	return out, nil
 }
 
-func (s *eventService) GetEvent(ctx context.Context, subject *model.Subject, eventID string) (*EventView, error) {
+func (s *eventService) GetEvent(ctx context.Context, subject *models.Subject, eventID string) (*EventView, error) {
 	const op = "event.get"
 	if eventID == "" {
-		return nil, validationErr(op, "event_id обязателен")
+		return nil, validationErr(op, "event_id is required")
 	}
 	if err := authorizeEvent(ctx, s.auth, subject, eventID); err != nil {
 		return nil, err
 	}
 
 	var (
-		ev  *model.Event
+		ev  *models.Event
 		err error
 	)
 	if subject != nil && !subject.AllowAll && subject.ProjectID != "" {
@@ -99,12 +99,12 @@ func (s *eventService) GetEvent(ctx context.Context, subject *model.Subject, eve
 		ev, err = s.events.GetByID(ctx, eventID)
 	}
 	if err != nil {
-		return nil, notFoundErr(op, "событие не найдено", err)
+		return nil, notFoundErr(op, "event not found", err)
 	}
 
 	payload, err := s.events.GetPayload(ctx, ev)
 	if err != nil {
-		return nil, notFoundErr(op, "payload отсутствует", err)
+		return nil, notFoundErr(op, "payload missing", err)
 	}
 
 	deliveries, err := s.deliveries.ListByEventID(ctx, eventID)
@@ -120,20 +120,20 @@ func (s *eventService) GetEvent(ctx context.Context, subject *model.Subject, eve
 	}, nil
 }
 
-func (s *eventService) Ingest(ctx context.Context, subject *model.Subject, ev *model.Event, maxPayloadBytes int64) (bool, error) {
+func (s *eventService) Ingest(ctx context.Context, subject *models.Subject, ev *models.Event, maxPayloadBytes int64) (bool, error) {
 	const op = "event.ingest"
 	if ev == nil || ev.ID == "" || ev.TunnelID == "" || ev.Topic == "" {
-		return false, validationErr(op, "неполное событие")
+		return false, validationErr(op, "incomplete event")
 	}
 	if len(ev.Payload) == 0 {
-		return false, validationErr(op, "пустой payload")
+		return false, validationErr(op, "empty payload")
 	}
 	if maxPayloadBytes > 0 && int64(len(ev.Payload)) > maxPayloadBytes {
-		return false, validationErr(op, "payload превышает лимит").WithArg("event_id", ev.ID)
+		return false, validationErr(op, "payload exceeds limit").WithArg("event_id", ev.ID)
 	}
 	if subject != nil && !subject.AllowAll {
 		if subject.TunnelID != "" && ev.TunnelID != subject.TunnelID {
-			return false, forbiddenErr(op, "tunnel_id события не совпадает с агентом")
+			return false, forbiddenErr(op, "event tunnel_id does not match agent")
 		}
 		if err := authorizeTunnel(ctx, s.auth, subject, ev.TunnelID); err != nil {
 			return false, err

@@ -1,0 +1,28 @@
+---
+description: All runtime logs, error messages, and debug output must be in English
+alwaysApply: true
+---
+
+# English logs and errors
+
+All **runtime-facing** strings must be written in **English**:
+
+- `log/slog` messages (`Info`, `Warn`, `Error`, `Debug`)
+- `fault` error messages (`New`, `Wrap`, `WithHint`)
+- `fmt.Errorf` / `errors.New` wraps returned to callers
+- CLI error output (`fault.RenderCLI` labels: operation, cause, hint)
+- `t.Skipf` / integration skip reasons when infra is unavailable
+
+Comments, README, and user-facing dashboard UI copy may stay in any language unless explicitly requested.
+
+**Examples**
+
+```go
+// Good
+log.Info("agent connected", "tunnel_id", id)
+return fault.ErrNotFound.New("event not found").WithOp(op)
+
+// Bad
+log.Info("агент подключился", "tunnel_id", id)
+return fault.ErrNotFound.New("событие не найдено").WithOp(op)
+```

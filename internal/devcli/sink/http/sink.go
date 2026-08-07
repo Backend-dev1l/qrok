@@ -68,7 +68,7 @@ func (c *Client) Deliver(ctx context.Context, ev *qrokv1.EventEnvelope) Delivery
 		return Delivery{
 			StatusCode: int32(resp.StatusCode),
 			LatencyMS:  latency,
-			Error:      fmt.Sprintf("localhost вернул HTTP %d", resp.StatusCode),
+			Error:      fmt.Sprintf("localhost returned HTTP %d", resp.StatusCode),
 		}
 	}
 	return Delivery{StatusCode: int32(resp.StatusCode), LatencyMS: latency}

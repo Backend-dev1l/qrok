@@ -35,8 +35,8 @@ func TestErrorFormat(t *testing.T) {
 		},
 		{
 			name: "op + сообщение + причина",
-			err:  ErrServiceUnavail.Wrap(errors.New("connection refused"), "kafka недоступна").WithOp("agent.kafka.subscribe"),
-			want: "agent.kafka.subscribe: kafka недоступна: connection refused",
+			err:  ErrServiceUnavail.Wrap(errors.New("connection refused"), "kafka unavailable").WithOp("agent.kafka.subscribe"),
+			want: "agent.kafka.subscribe: kafka unavailable: connection refused",
 		},
 	}
 	for _, tt := range tests {
@@ -50,7 +50,7 @@ func TestErrorFormat(t *testing.T) {
 
 func TestWrapPreservesChain(t *testing.T) {
 	root := errors.New("dial tcp: connection refused")
-	err := ErrServiceUnavail.Wrap(root, "не удалось подключиться")
+	err := ErrServiceUnavail.Wrap(root, "failed to connect")
 
 	if !errors.Is(err, root) {
 		t.Error("errors.Is не находит первопричину через Wrap")
@@ -73,8 +73,8 @@ func TestFromError(t *testing.T) {
 	})
 
 	t.Run("fault в цепочке", func(t *testing.T) {
-		inner := ErrForbidden.New("нет доступа")
-		wrapped := ErrInternal.Wrap(inner, "внешний слой")
+		inner := ErrForbidden.New("access denied")
+		wrapped := ErrInternal.Wrap(inner, "outer layer")
 		if got := FromError(wrapped).Code(); got != ErrInternal {
 			t.Errorf("должен вернуться ближайший Fault: got %q", got)
 		}
@@ -124,7 +124,7 @@ func TestHTTPStatus(t *testing.T) {
 		{ErrTimeout, http.StatusGatewayTimeout},
 		{ErrCanceled, http.StatusRequestTimeout},
 		{ErrServiceUnavail, http.StatusServiceUnavailable},
-		{Code("НЕИЗВЕСТНЫЙ"), http.StatusInternalServerError},
+		{Code("UNKNOWN"), http.StatusInternalServerError},
 	}
 	for _, tt := range tests {
 		if got := tt.code.Err().HTTPStatus(); got != tt.want {
@@ -145,7 +145,7 @@ func TestGRPCCode(t *testing.T) {
 		{ErrTimeout, codes.DeadlineExceeded},
 		{ErrCanceled, codes.Canceled},
 		{ErrServiceUnavail, codes.Unavailable},
-		{Code("НЕИЗВЕСТНЫЙ"), codes.Internal},
+		{Code("UNKNOWN"), codes.Internal},
 	}
 	for _, tt := range tests {
 		if got := tt.code.Err().GRPCCode(); got != tt.want {
@@ -206,7 +206,7 @@ func TestWriteHTTPError(t *testing.T) {
 
 	t.Run("внутренности не утекают", func(t *testing.T) {
 		rec := httptest.NewRecorder()
-		err := ErrInternal.Wrap(errors.New("pq: duplicate key value"), "не удалось сохранить событие").
+		err := ErrInternal.Wrap(errors.New("pq: duplicate key value"), "failed to save event").
 			WithOp("eventstore.insert")
 
 		WriteHTTPError(context.Background(), rec, err)
@@ -219,12 +219,12 @@ func TestWriteHTTPError(t *testing.T) {
 
 	t.Run("обычная ошибка -> 500 без деталей", func(t *testing.T) {
 		rec := httptest.NewRecorder()
-		WriteHTTPError(context.Background(), rec, errors.New("секретная внутренняя ошибка"))
+		WriteHTTPError(context.Background(), rec, errors.New("secret internal error"))
 
 		if rec.Code != http.StatusInternalServerError {
 			t.Errorf("status = %d", rec.Code)
 		}
-		if strings.Contains(rec.Body.String(), "секретная") {
+		if strings.Contains(rec.Body.String(), "secret") {
 			t.Errorf("текст сырой ошибки утёк клиенту: %s", rec.Body.String())
 		}
 	})
@@ -242,20 +242,20 @@ func TestRenderCLI(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 
 	err := ErrServiceUnavail.
-		Wrap(errors.New("dial tcp 10.0.1.5:9092: connection refused"), "не удалось подключиться к Kafka").
+		Wrap(errors.New("dial tcp 10.0.1.5:9092: connection refused"), "failed to connect to Kafka").
 		WithOp("agent.kafka.subscribe").
-		WithHint("проверьте --brokers и что порт 9092 доступен с этой машины")
+		WithHint("check --brokers and that port 9092 is reachable from this machine")
 
 	out := RenderCLI(err)
 
 	for _, want := range []string{
-		"✗ не удалось подключиться к Kafka (SERVICE_UNAVAILABLE)",
-		"операция:",
+		"✗ failed to connect to Kafka (SERVICE_UNAVAILABLE)",
+		"operation:",
 		"agent.kafka.subscribe",
-		"причина:",
+		"cause:",
 		"connection refused",
-		"подсказка:",
-		"проверьте --brokers",
+		"hint:",
+		"check --brokers",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("в выводе нет %q:\n%s", want, out)
@@ -271,7 +271,7 @@ func TestRenderCLI(t *testing.T) {
 }
 
 func TestLogAttrs(t *testing.T) {
-	err := ErrConflict.New("событие уже существует").
+	err := ErrConflict.New("event already exists").
 		WithOp("eventstore.insert").
 		WithArg("event_id", "01J000")
 

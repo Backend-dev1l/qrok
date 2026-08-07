@@ -34,7 +34,7 @@ func newAgentCmd() *cobra.Command {
 				Level:  cfg.Log.Level,
 				Format: cfg.Log.Format,
 			})
-			log.Info("запуск агента",
+			log.Info("starting agent",
 				"tunnel_id", cfg.Agent.TunnelID,
 				"gateway", cfg.Agent.Gateway,
 				"topics", cfg.Agent.Topics,
@@ -46,7 +46,7 @@ func newAgentCmd() *cobra.Command {
 			if err := agentpkg.Run(ctx, cfg, log); err != nil {
 				return err
 			}
-			fmt.Println("агент остановлен")
+			fmt.Println("agent stopped")
 			return nil
 		},
 	}

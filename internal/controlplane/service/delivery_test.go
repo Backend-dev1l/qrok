@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"qrok/internal/controlplane/model"
+	"qrok/internal/controlplane/infrastructure/models"
 	"qrok/internal/controlplane/service"
 	"qrok/pkg/fault"
 )
@@ -23,7 +23,7 @@ func TestDeliveryService(t *testing.T) {
 		repo := &fakeDeliveryRepo{}
 		svc := service.NewDeliveryService(repo)
 
-		err := svc.RecordResult(ctx, &model.DeliveryResult{
+		err := svc.RecordResult(ctx, &models.DeliveryResult{
 			DeliveryID: "del-1",
 			EventID:    "ev-1",
 			StatusCode: 200,
@@ -33,8 +33,8 @@ func TestDeliveryService(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, repo.upserted, 1)
 		rec := repo.upserted[0]
-		assert.Equal(t, model.DeliveryStatusDelivered, rec.Status)
-		assert.Equal(t, model.DeliveryKindLive, rec.Kind)
+		assert.Equal(t, models.DeliveryStatusDelivered, rec.Status)
+		assert.Equal(t, models.DeliveryKindLive, rec.Kind)
 		require.NotNil(t, rec.StatusCode)
 		assert.Equal(t, int32(200), *rec.StatusCode)
 		require.NotNil(t, rec.LatencyMS)
@@ -47,7 +47,7 @@ func TestDeliveryService(t *testing.T) {
 		repo := &fakeDeliveryRepo{}
 		svc := service.NewDeliveryService(repo)
 
-		err := svc.RecordResult(ctx, &model.DeliveryResult{
+		err := svc.RecordResult(ctx, &models.DeliveryResult{
 			DeliveryID: "del-2",
 			EventID:    "ev-1",
 			StatusCode: 500,
@@ -55,7 +55,7 @@ func TestDeliveryService(t *testing.T) {
 
 		require.NoError(t, err)
 		require.Len(t, repo.upserted, 1)
-		assert.Equal(t, model.DeliveryStatusFailed, repo.upserted[0].Status)
+		assert.Equal(t, models.DeliveryStatusFailed, repo.upserted[0].Status)
 	})
 
 	t.Run("record_result_failed_error_message", func(t *testing.T) {
@@ -64,7 +64,7 @@ func TestDeliveryService(t *testing.T) {
 		repo := &fakeDeliveryRepo{}
 		svc := service.NewDeliveryService(repo)
 
-		err := svc.RecordResult(ctx, &model.DeliveryResult{
+		err := svc.RecordResult(ctx, &models.DeliveryResult{
 			DeliveryID: "del-3",
 			EventID:    "ev-1",
 			StatusCode: 200,
@@ -74,7 +74,7 @@ func TestDeliveryService(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, repo.upserted, 1)
 		rec := repo.upserted[0]
-		assert.Equal(t, model.DeliveryStatusFailed, rec.Status)
+		assert.Equal(t, models.DeliveryStatusFailed, rec.Status)
 		assert.Equal(t, "connection reset", rec.Error)
 	})
 

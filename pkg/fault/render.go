@@ -45,16 +45,16 @@ func RenderCLI(err error) string {
 
 	details := make([][2]string, 0, 4)
 	if f.op != "" {
-		details = append(details, [2]string{"операция", f.op})
+		details = append(details, [2]string{"operation", f.op})
 	}
 	if f.cause != nil {
-		details = append(details, [2]string{"причина", f.cause.Error()})
+		details = append(details, [2]string{"cause", f.cause.Error()})
 	}
 	for k, v := range f.args {
 		details = append(details, [2]string{k, v})
 	}
 	if f.hint != "" {
-		details = append(details, [2]string{"подсказка", f.hint})
+		details = append(details, [2]string{"hint", f.hint})
 	}
 
 	if len(details) > 0 {

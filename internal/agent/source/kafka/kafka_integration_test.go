@@ -24,7 +24,7 @@ func requireBroker(t *testing.T) string {
 	brokerAddr := integ.KafkaBroker()
 	conn, err := kafka.Dial("tcp", brokerAddr)
 	if err != nil {
-		t.Skipf("kafka недоступен (%v); запустите make compose-up", err)
+		t.Skipf("kafka unavailable (%v); run make compose-up", err)
 	}
 	_ = conn.Close()
 	return brokerAddr
@@ -53,7 +53,7 @@ func createTopic(t *testing.T, brokerAddr, topic string) {
 	require.Eventually(t, func() bool {
 		partitions, err := conn.ReadPartitions(topic)
 		return err == nil && len(partitions) > 0
-	}, 30*time.Second, 200*time.Millisecond, "топик %s не стал видимым", topic)
+	}, 30*time.Second, 200*time.Millisecond, "topic %s did not become visible", topic)
 }
 
 func produce(t *testing.T, brokerAddr, topic string, msgs ...kafka.Message) {
@@ -88,7 +88,7 @@ func receive(t *testing.T, out <-chan *source.Event, timeout time.Duration) *sou
 		default:
 			return false
 		}
-	}, timeout, 100*time.Millisecond, "событие не пришло за отведённое время")
+	}, timeout, 100*time.Millisecond, "event did not arrive within timeout")
 	return ev
 }
 

@@ -80,42 +80,42 @@ func parsePasswordHash(encoded string) (argonParams, []byte, []byte, error) {
 
 	parts := strings.Split(encoded, "$")
 	if len(parts) != 6 || parts[0] != "" {
-		return p, nil, nil, hashFormatErr("ожидалась PHC-строка из 6 секций")
+		return p, nil, nil, hashFormatErr("expected PHC string with 6 sections")
 	}
 	if parts[1] != "argon2id" {
-		return p, nil, nil, hashFormatErr("неподдерживаемый алгоритм " + parts[1])
+		return p, nil, nil, hashFormatErr("unsupported algorithm " + parts[1])
 	}
 
 	version, err := parseUintParam(parts[2], "v=", 8)
 	if err != nil || version != argon2.Version {
-		return p, nil, nil, hashFormatErr("неподдерживаемая версия argon2: " + parts[2])
+		return p, nil, nil, hashFormatErr("unsupported argon2 version: " + parts[2])
 	}
 
 	rawParams := strings.Split(parts[3], ",")
 	if len(rawParams) != 3 {
-		return p, nil, nil, hashFormatErr("невалидные параметры: " + parts[3])
+		return p, nil, nil, hashFormatErr("invalid parameters: " + parts[3])
 	}
 	memory, errMemory := parseUintParam(rawParams[0], "m=", 32)
 	iterations, errTime := parseUintParam(rawParams[1], "t=", 32)
 	threads, errThreads := parseUintParam(rawParams[2], "p=", 8)
 	if errMemory != nil || errTime != nil || errThreads != nil {
-		return p, nil, nil, hashFormatErr("невалидные параметры: " + parts[3])
+		return p, nil, nil, hashFormatErr("invalid parameters: " + parts[3])
 	}
 	p = argonParams{memoryKiB: uint32(memory), time: uint32(iterations), threads: uint8(threads)}
 	if p.memoryKiB == 0 || p.time == 0 || p.threads == 0 {
-		return p, nil, nil, hashFormatErr("параметры должны быть > 0: " + parts[3])
+		return p, nil, nil, hashFormatErr("parameters must be > 0: " + parts[3])
 	}
 	if p.memoryKiB > maxArgonMemoryKiB || p.time > maxArgonTime || p.threads > maxArgonThreads {
-		return p, nil, nil, hashFormatErr("параметры превышают безопасный предел: " + parts[3])
+		return p, nil, nil, hashFormatErr("parameters exceed safe limit: " + parts[3])
 	}
 
 	salt, err := base64.RawStdEncoding.DecodeString(parts[4])
 	if err != nil || len(salt) < 8 || len(salt) > 64 {
-		return p, nil, nil, hashFormatErr("невалидная base64-соль")
+		return p, nil, nil, hashFormatErr("invalid base64 salt")
 	}
 	key, err := base64.RawStdEncoding.DecodeString(parts[5])
 	if err != nil || len(key) < 16 || len(key) > 64 {
-		return p, nil, nil, hashFormatErr("невалидный base64-хеш")
+		return p, nil, nil, hashFormatErr("invalid base64 hash")
 	}
 
 	return p, salt, key, nil
@@ -123,7 +123,7 @@ func parsePasswordHash(encoded string) (argonParams, []byte, []byte, error) {
 
 func parseUintParam(value, prefix string, bitSize int) (uint64, error) {
 	if !strings.HasPrefix(value, prefix) || len(value) == len(prefix) {
-		return 0, fmt.Errorf("ожидался префикс %q", prefix)
+		return 0, fmt.Errorf("expected prefix %q", prefix)
 	}
 	return strconv.ParseUint(value[len(prefix):], 10, bitSize)
 }

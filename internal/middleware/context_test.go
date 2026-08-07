@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"qrok/internal/controlplane/model"
+	"qrok/internal/controlplane/infrastructure/models"
 	"qrok/internal/middleware"
 	"qrok/pkg/fault"
 )
@@ -15,7 +15,7 @@ import (
 func TestSubjectContext(t *testing.T) {
 	t.Parallel()
 
-	subject := &model.Subject{
+	subject := &models.Subject{
 		TokenID:   "tok-1",
 		ProjectID: "prj-1",
 	}

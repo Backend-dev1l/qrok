@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"qrok/internal/bus/inproc"
-	"qrok/internal/controlplane/model"
+	"qrok/internal/controlplane/infrastructure/models"
 	"qrok/internal/controlplane/service"
 	"qrok/internal/tunnel"
 	"qrok/pkg/fault"
@@ -18,14 +18,14 @@ func TestReplayService(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	allowAll := &model.Subject{AllowAll: true}
-	scoped := &model.Subject{ProjectID: "prj-1"}
+	allowAll := &models.Subject{AllowAll: true}
+	scoped := &models.Subject{ProjectID: "prj-1"}
 
 	t.Run("replay_success", func(t *testing.T) {
 		t.Parallel()
 
 		events := newFakeEventRepo()
-		events.events["ev-1"] = &model.Event{
+		events.events["ev-1"] = &models.Event{
 			ID:       "ev-1",
 			TunnelID: "tunnel-1",
 			Topic:    "orders",
@@ -44,11 +44,11 @@ func TestReplayService(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "ev-1", result.EventID)
 		assert.Equal(t, "target-1", result.TargetID)
-		assert.Equal(t, string(model.DeliveryStatusPending), result.Status)
+		assert.Equal(t, string(models.DeliveryStatusPending), result.Status)
 		assert.NotEmpty(t, result.DeliveryID)
 
 		require.Len(t, deliveries.pending, 1)
-		assert.Equal(t, model.DeliveryKindReplay, deliveries.pending[0].Kind)
+		assert.Equal(t, models.DeliveryKindReplay, deliveries.pending[0].Kind)
 
 		select {
 		case env := <-subCh:
@@ -63,7 +63,7 @@ func TestReplayService(t *testing.T) {
 		t.Parallel()
 
 		events := newFakeEventRepo()
-		events.events["ev-1"] = &model.Event{
+		events.events["ev-1"] = &models.Event{
 			ID: "ev-1", TunnelID: "tunnel-1", Topic: "t", Payload: []byte("x"),
 		}
 
@@ -113,7 +113,7 @@ func TestToReplayEnvelope(t *testing.T) {
 
 	partition := int32(1)
 	offset := int64(42)
-	ev := &model.Event{
+	ev := &models.Event{
 		ID:           "01EVENT",
 		TunnelID:     "tunnel-1",
 		Topic:        "orders",

@@ -60,7 +60,7 @@ func run() error {
 	fmt.Println("  qrok login --api http://127.0.0.1:8080 --project", devProjectID)
 	fmt.Println("  qrok listen --config deploy/listen.example.yaml")
 	fmt.Println()
-	fmt.Println("Агент:")
+	fmt.Println("Agent:")
 	fmt.Println("  qrok agent start --config deploy/agent.example.yaml")
 	return nil
 }

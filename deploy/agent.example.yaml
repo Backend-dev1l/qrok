@@ -6,7 +6,7 @@ log:
   format: pretty
 
 agent:
-  token: "qrok_agt_1A6bu2ismotVo3ADnOf1ibXVniyoDmJKjj9dS7_vt4k" # qrok_agt_... (make seed-dev)
+  token: "qrok_agt_-itEbS1fisCPAjXuKw2OrlwzZFomuASKzj3YSur3H-s" # qrok_agt_... (make seed-dev)
   tunnel_id: dev-tunnel # dev-tunnel (make seed-dev)
   gateway: localhost:9090
   source_type: kafka

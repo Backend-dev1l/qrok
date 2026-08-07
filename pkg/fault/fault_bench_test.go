@@ -20,7 +20,7 @@ func BenchmarkWrapChain(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		sink = ErrServiceUnavail.
-			Wrap(benchErr, "kafka недоступна").
+			Wrap(benchErr, "kafka unavailable").
 			WithOp("agent.kafka.subscribe").
 			WithArg("group_id", "qrok-agent-t1")
 	}
@@ -37,9 +37,9 @@ func BenchmarkFromErrorFault(b *testing.B) {
 func BenchmarkRenderCLI(b *testing.B) {
 	b.Setenv("NO_COLOR", "1")
 	err := ErrServiceUnavail.
-		Wrap(benchErr, "kafka недоступна").
+		Wrap(benchErr, "kafka unavailable").
 		WithOp("agent.kafka.subscribe").
-		WithHint("проверьте --brokers")
+		WithHint("check --brokers")
 	b.ReportAllocs()
 	for b.Loop() {
 		sink = RenderCLI(err)
@@ -56,7 +56,7 @@ func BenchmarkWriteHTTPError(b *testing.B) {
 }
 
 func BenchmarkLogAttrs(b *testing.B) {
-	err := ErrConflict.New("событие уже существует").
+	err := ErrConflict.New("event already exists").
 		WithOp("eventstore.insert").
 		WithArg("event_id", "01J000")
 	b.ReportAllocs()

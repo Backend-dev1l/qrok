@@ -51,16 +51,16 @@ func connectFault(err error) error {
 	return fault.ErrServiceUnavail.
 		Wrap(err, "PostgreSQL недоступен").
 		WithOp("postgres.connect").
-		WithHint("проверьте DSN и что база запущена (make compose-up)")
+		WithHint("check DSN and that the database is running (make compose-up)")
 }
 
 func (c Config) poolConfig() (*pgxpool.Config, error) {
 	pc, err := pgxpool.ParseConfig(c.DSN)
 	if err != nil {
 		return nil, fault.ErrValidation.
-			Wrap(err, "невалидный DSN PostgreSQL").
+			Wrap(err, "invalid PostgreSQL DSN").
 			WithOp("postgres.parse_dsn").
-			WithHint("формат: postgres://user:pass@host:5432/db?sslmode=disable")
+			WithHint("format: postgres://user:pass@host:5432/db?sslmode=disable")
 	}
 
 	setIfPositive(&pc.MaxConns, c.MaxConns)

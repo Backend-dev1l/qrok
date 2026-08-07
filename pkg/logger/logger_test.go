@@ -53,14 +53,14 @@ func TestLevelFiltering(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	l.Info("не должно попасть")
-	l.Warn("должно попасть")
+	l.Info("should not appear")
+	l.Warn("should appear")
 
 	out := buf.String()
-	if strings.Contains(out, "не должно попасть") {
+	if strings.Contains(out, "should not appear") {
 		t.Error("info-запись прошла при уровне warn")
 	}
-	if !strings.Contains(out, "должно попасть") {
+	if !strings.Contains(out, "should appear") {
 		t.Error("warn-запись не прошла")
 	}
 }
@@ -101,9 +101,9 @@ func TestErrorHelper(t *testing.T) {
 	ctx := NewContext(context.Background(), MustNew(&buf, Config{}))
 
 	err := fault.ErrServiceUnavail.
-		Wrap(errors.New("connection refused"), "kafka недоступна").
+		Wrap(errors.New("connection refused"), "kafka unavailable").
 		WithOp("agent.kafka.subscribe")
-	Error(ctx, "ошибка подписки", err)
+	Error(ctx, "subscription error", err)
 
 	var rec map[string]any
 	if jsonErr := json.Unmarshal(buf.Bytes(), &rec); jsonErr != nil {

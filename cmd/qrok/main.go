@@ -40,9 +40,9 @@ func notImplemented(name, short string) *cobra.Command {
 		Short: short,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return fault.ErrUnprocessable.
-				Newf("команда %q ещё не реализована", name).
+				Newf("command %q is not implemented yet", name).
 				WithOp("cli." + name).
-				WithHint("реализация — этап 1, см. docs/TZ.md")
+				WithHint("implementation is stage 1, see docs/TZ.md")
 		},
 	}
 }

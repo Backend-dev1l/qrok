@@ -47,13 +47,13 @@ func (c *AgentClient) RunSession(
 	streamCtx := grpcutil.WithBearer(ctx, token)
 	stream, err := c.client.AgentStream(streamCtx)
 	if err != nil {
-		return fault.ErrServiceUnavail.Wrap(err, "не удалось открыть AgentStream").WithOp("agent.stream.open")
+		return fault.ErrServiceUnavail.Wrap(err, "failed to open AgentStream").WithOp("agent.stream.open")
 	}
 
 	if err := stream.Send(&qrokv1.AgentStreamRequest{
 		Msg: &qrokv1.AgentStreamRequest_Hello{Hello: hello},
 	}); err != nil {
-		return fault.ErrServiceUnavail.Wrap(err, "не удалось отправить hello").WithOp("agent.stream.hello")
+		return fault.ErrServiceUnavail.Wrap(err, "failed to send hello").WithOp("agent.stream.hello")
 	}
 
 	recvDone := make(chan error, 1)
@@ -65,7 +65,7 @@ func (c *AgentClient) RunSession(
 		if err := stream.Send(&qrokv1.AgentStreamRequest{
 			Msg: &qrokv1.AgentStreamRequest_Event{Event: ev},
 		}); err != nil {
-			return fault.ErrServiceUnavail.Wrap(err, "не удалось отправить событие").WithOp("agent.stream.send")
+			return fault.ErrServiceUnavail.Wrap(err, "failed to send event").WithOp("agent.stream.send")
 		}
 		return c.waitAck(sendCtx, ev.GetEventId())
 	}
@@ -90,7 +90,7 @@ func (c *AgentClient) recvLoop(stream grpc.BidiStreamingClient[qrokv1.AgentStrea
 			if err == io.EOF {
 				return nil
 			}
-			return fault.ErrServiceUnavail.Wrap(err, "ошибка чтения AgentStream").WithOp("agent.stream.recv")
+			return fault.ErrServiceUnavail.Wrap(err, "AgentStream read error").WithOp("agent.stream.recv")
 		}
 		if ack := resp.GetAck(); ack != nil {
 			c.mu.Lock()
@@ -120,6 +120,6 @@ func (c *AgentClient) waitAck(ctx context.Context, eventID string) error {
 	case <-ch:
 		return nil
 	case <-ctx.Done():
-		return fault.ErrTimeout.Wrap(ctx.Err(), "таймаут ожидания ack от облака").WithOp("agent.stream.wait_ack")
+		return fault.ErrTimeout.Wrap(ctx.Err(), "timeout waiting for ack from cloud").WithOp("agent.stream.wait_ack")
 	}
 }

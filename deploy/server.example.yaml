@@ -3,14 +3,14 @@
 # приоритет над файлом, флаги — над env.
 
 log:
-  level: info      # debug | info | warn | error
-  format: json     # json | text | pretty
+  level: info # debug | info | warn | error
+  format: json # json | text | pretty
 
 http:
   addr: ":8080"
   request_timeout: 30s
-  max_body_bytes: 1048576   # 1 МБ
-  allow_insecure_api: true   # dev: REST без Bearer; в проде — false
+  max_body_bytes: 1048576 # 1 МБ
+  allow_insecure_api: true # dev: REST без Bearer; в проде — false
   cors_origins:
     - http://localhost:5173
 
@@ -18,7 +18,7 @@ grpc:
   addr: ":9090"
 
 gateway:
-  allow_insecure_listen: true    # dev: ListenStream без qrok login; в проде — false
+  allow_insecure_listen: false # dev: ListenStream без qrok login; в проде — false
 
 postgres:
   dsn: postgres://qrok:qrok@127.0.0.1:5432/qrok?sslmode=disable
@@ -41,5 +41,5 @@ s3:
   use_ssl: false
 
 events:
-  payload_threshold_bytes: 262144   # 256 КБ — порог гибридного хранения payload
-  max_payload_bytes: 1048576        # 1 МБ — жёсткий лимит события
+  payload_threshold_bytes: 262144 # 256 КБ — порог гибридного хранения payload
+  max_payload_bytes: 1048576 # 1 МБ — жёсткий лимит события

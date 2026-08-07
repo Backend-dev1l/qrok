@@ -44,9 +44,9 @@ func New(w io.Writer, cfg Config) (*slog.Logger, error) {
 		handler = slog.NewJSONHandler(w, opts)
 	default:
 		return nil, fault.ErrValidation.
-			Newf("неизвестный формат логов %q", cfg.Format).
+			Newf("unknown log format %q", cfg.Format).
 			WithOp("logger.new").
-			WithHint("допустимые значения: json, text, pretty")
+			WithHint("allowed values: json, text, pretty")
 	}
 
 	return slog.New(handler), nil
@@ -79,9 +79,9 @@ func parseLevel(s string) (slog.Level, error) {
 		return slog.LevelError, nil
 	default:
 		return 0, fault.ErrValidation.
-			Newf("неизвестный уровень логов %q", s).
+			Newf("unknown log level %q", s).
 			WithOp("logger.new").
-			WithHint("допустимые значения: debug, info, warn, error")
+			WithHint("allowed values: debug, info, warn, error")
 	}
 }
 

@@ -18,7 +18,7 @@ func TestNewAgainstRealPostgres(t *testing.T) {
 
 	pool, err := New(ctx, Config{DSN: integ.PostgresDSN()})
 	if err != nil {
-		t.Skipf("postgres недоступен (%v); запустите make compose-up", err)
+		t.Skipf("postgres unavailable (%v); run make compose-up", err)
 	}
 	t.Cleanup(func() { pool.Close() })
 

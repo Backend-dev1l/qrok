@@ -20,12 +20,15 @@ func dashboardHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/")
 		switch path {
-		case "", "/":
-			path = "index.html"
+		case "", "/", "index.html":
+			// FileServer сам отдаёт index.html для каталога; явный /index.html
+			// Go редиректит на ./ и даёт ERR_TOO_MANY_REDIRECTS на /dashboard/.
+			r.URL.Path = "/"
 		case "device", "device/":
-			path = "device.html"
+			r.URL.Path = "/device.html"
+		default:
+			r.URL.Path = "/" + path
 		}
-		r.URL.Path = "/" + path
 		fileServer.ServeHTTP(w, r)
 	})
 }

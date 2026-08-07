@@ -10,7 +10,7 @@ import (
 	"qrok/internal/controlplane/infrastructure/auth"
 	"qrok/internal/controlplane/infrastructure/delivery"
 	"qrok/internal/controlplane/infrastructure/eventstore"
-	"qrok/internal/controlplane/model"
+	"qrok/internal/controlplane/infrastructure/models"
 )
 
 type tokenRec struct {
@@ -21,7 +21,7 @@ type tokenRec struct {
 
 type deviceRec struct {
 	userCode    string
-	status      model.DeviceStatus
+	status      models.DeviceStatus
 	expiresAt   time.Time
 	accessToken *string
 	projectID   string
@@ -124,7 +124,7 @@ func (f *fakeAuthRepo) InsertDeviceAuthorization(_ context.Context, deviceHash, 
 	defer f.mu.Unlock()
 	f.devices[deviceHash] = &deviceRec{
 		userCode:  userCode,
-		status:    model.DeviceStatusPending,
+		status:    models.DeviceStatusPending,
 		expiresAt: expiresAt,
 		projectID: projectID,
 	}
@@ -132,7 +132,7 @@ func (f *fakeAuthRepo) InsertDeviceAuthorization(_ context.Context, deviceHash, 
 	return nil
 }
 
-func (f *fakeAuthRepo) GetDeviceByHash(_ context.Context, deviceHash string) (model.DeviceStatus, time.Time, *string, error) {
+func (f *fakeAuthRepo) GetDeviceByHash(_ context.Context, deviceHash string) (models.DeviceStatus, time.Time, *string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	rec, ok := f.devices[deviceHash]
@@ -142,7 +142,7 @@ func (f *fakeAuthRepo) GetDeviceByHash(_ context.Context, deviceHash string) (mo
 	return rec.status, rec.expiresAt, rec.accessToken, nil
 }
 
-func (f *fakeAuthRepo) UpdateDeviceStatus(_ context.Context, deviceHash string, status model.DeviceStatus) error {
+func (f *fakeAuthRepo) UpdateDeviceStatus(_ context.Context, deviceHash string, status models.DeviceStatus) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if rec, ok := f.devices[deviceHash]; ok {
@@ -155,7 +155,7 @@ func (f *fakeAuthRepo) ConsumeDeviceToken(_ context.Context, deviceHash string) 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if rec, ok := f.devices[deviceHash]; ok {
-		rec.status = model.DeviceStatusConsumed
+		rec.status = models.DeviceStatusConsumed
 		rec.accessToken = nil
 	}
 	return nil
@@ -176,7 +176,7 @@ type fakeAuthTx struct {
 	parent *fakeAuthRepo
 }
 
-func (tx *fakeAuthTx) GetDeviceByUserCodeForUpdate(_ context.Context, userCode string) (string, model.DeviceStatus, time.Time, error) {
+func (tx *fakeAuthTx) GetDeviceByUserCodeForUpdate(_ context.Context, userCode string) (string, models.DeviceStatus, time.Time, error) {
 	tx.parent.mu.Lock()
 	defer tx.parent.mu.Unlock()
 	hash, ok := tx.parent.userCodeHash[userCode]
@@ -187,7 +187,7 @@ func (tx *fakeAuthTx) GetDeviceByUserCodeForUpdate(_ context.Context, userCode s
 	return hash, rec.status, rec.expiresAt, nil
 }
 
-func (tx *fakeAuthTx) UpdateDeviceStatus(ctx context.Context, deviceHash string, status model.DeviceStatus) error {
+func (tx *fakeAuthTx) UpdateDeviceStatus(ctx context.Context, deviceHash string, status models.DeviceStatus) error {
 	return tx.parent.UpdateDeviceStatus(ctx, deviceHash, status)
 }
 
@@ -195,7 +195,7 @@ func (tx *fakeAuthTx) ApproveDevice(_ context.Context, deviceHash, projectID, de
 	tx.parent.mu.Lock()
 	defer tx.parent.mu.Unlock()
 	rec := tx.parent.devices[deviceHash]
-	rec.status = model.DeviceStatusApproved
+	rec.status = models.DeviceStatusApproved
 	rec.projectID = projectID
 	rec.devTokenID = devTokenID
 	rec.accessToken = &accessToken
@@ -211,15 +211,15 @@ func (tx *fakeAuthTx) ProjectExists(_ context.Context, projectID string) (bool, 
 }
 
 type fakeEventRepo struct {
-	events    map[string]*model.Event
+	events    map[string]*models.Event
 	insertErr error
 }
 
 func newFakeEventRepo() *fakeEventRepo {
-	return &fakeEventRepo{events: make(map[string]*model.Event)}
+	return &fakeEventRepo{events: make(map[string]*models.Event)}
 }
 
-func (f *fakeEventRepo) Insert(_ context.Context, ev *model.Event) (bool, error) {
+func (f *fakeEventRepo) Insert(_ context.Context, ev *models.Event) (bool, error) {
 	if f.insertErr != nil {
 		return false, f.insertErr
 	}
@@ -231,7 +231,7 @@ func (f *fakeEventRepo) Insert(_ context.Context, ev *model.Event) (bool, error)
 	return true, nil
 }
 
-func (f *fakeEventRepo) GetByID(_ context.Context, id string) (*model.Event, error) {
+func (f *fakeEventRepo) GetByID(_ context.Context, id string) (*models.Event, error) {
 	ev, ok := f.events[id]
 	if !ok {
 		return nil, pgx.ErrNoRows
@@ -240,7 +240,7 @@ func (f *fakeEventRepo) GetByID(_ context.Context, id string) (*model.Event, err
 	return &cp, nil
 }
 
-func (f *fakeEventRepo) GetByIDForProject(_ context.Context, projectID, eventID string) (*model.Event, error) {
+func (f *fakeEventRepo) GetByIDForProject(_ context.Context, projectID, eventID string) (*models.Event, error) {
 	ev, ok := f.events[eventID]
 	if !ok {
 		return nil, pgx.ErrNoRows
@@ -251,15 +251,15 @@ func (f *fakeEventRepo) GetByIDForProject(_ context.Context, projectID, eventID 
 	return &cp, nil
 }
 
-func (f *fakeEventRepo) GetPayload(_ context.Context, ev *model.Event) ([]byte, error) {
+func (f *fakeEventRepo) GetPayload(_ context.Context, ev *models.Event) ([]byte, error) {
 	if len(ev.Payload) > 0 {
 		return ev.Payload, nil
 	}
 	return nil, pgx.ErrNoRows
 }
 
-func (f *fakeEventRepo) ListByTunnel(_ context.Context, tunnelID string, limit int) ([]*model.Event, error) {
-	var out []*model.Event
+func (f *fakeEventRepo) ListByTunnel(_ context.Context, tunnelID string, limit int) ([]*models.Event, error) {
+	var out []*models.Event
 	for _, ev := range f.events {
 		if ev.TunnelID == tunnelID {
 			cp := *ev
@@ -275,13 +275,13 @@ func (f *fakeEventRepo) ListByTunnel(_ context.Context, tunnelID string, limit i
 type fakeDeliveryRepo struct {
 	mu sync.Mutex
 
-	pending   []*model.Delivery
-	upserted  []*model.Delivery
+	pending   []*models.Delivery
+	upserted  []*models.Delivery
 	createErr error
 	upsertErr error
 }
 
-func (f *fakeDeliveryRepo) CreatePending(_ context.Context, rec *model.Delivery) error {
+func (f *fakeDeliveryRepo) CreatePending(_ context.Context, rec *models.Delivery) error {
 	if f.createErr != nil {
 		return f.createErr
 	}
@@ -292,7 +292,7 @@ func (f *fakeDeliveryRepo) CreatePending(_ context.Context, rec *model.Delivery)
 	return nil
 }
 
-func (f *fakeDeliveryRepo) UpsertResult(_ context.Context, rec *model.Delivery) error {
+func (f *fakeDeliveryRepo) UpsertResult(_ context.Context, rec *models.Delivery) error {
 	if f.upsertErr != nil {
 		return f.upsertErr
 	}
@@ -303,7 +303,7 @@ func (f *fakeDeliveryRepo) UpsertResult(_ context.Context, rec *model.Delivery) 
 	return nil
 }
 
-func (f *fakeDeliveryRepo) GetByID(_ context.Context, id string) (*model.Delivery, error) {
+func (f *fakeDeliveryRepo) GetByID(_ context.Context, id string) (*models.Delivery, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, rec := range f.upserted {
@@ -321,10 +321,10 @@ func (f *fakeDeliveryRepo) GetByID(_ context.Context, id string) (*model.Deliver
 	return nil, pgx.ErrNoRows
 }
 
-func (f *fakeDeliveryRepo) ListByEventID(_ context.Context, eventID string) ([]*model.Delivery, error) {
+func (f *fakeDeliveryRepo) ListByEventID(_ context.Context, eventID string) ([]*models.Delivery, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var out []*model.Delivery
+	var out []*models.Delivery
 	for _, rec := range append(f.pending, f.upserted...) {
 		if rec.EventID == eventID {
 			cp := *rec
@@ -334,14 +334,14 @@ func (f *fakeDeliveryRepo) ListByEventID(_ context.Context, eventID string) ([]*
 	return out, nil
 }
 
-func (f *fakeDeliveryRepo) ListLatestByEventIDs(_ context.Context, eventIDs []string) (map[string]*model.Delivery, error) {
+func (f *fakeDeliveryRepo) ListLatestByEventIDs(_ context.Context, eventIDs []string) (map[string]*models.Delivery, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	want := make(map[string]struct{}, len(eventIDs))
 	for _, id := range eventIDs {
 		want[id] = struct{}{}
 	}
-	out := make(map[string]*model.Delivery)
+	out := make(map[string]*models.Delivery)
 	for _, rec := range append(f.pending, f.upserted...) {
 		if _, ok := want[rec.EventID]; !ok {
 			continue

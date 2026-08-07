@@ -16,14 +16,14 @@ func internalErr(op string, err error) error {
 	if err == nil {
 		return nil
 	}
-	return fault.ErrInternal.Wrap(err, "внутренняя ошибка").WithOp(op)
+	return fault.ErrInternal.Wrap(err, "internal error").WithOp(op)
 }
 
 func unavailableErr(op string, err error) error {
 	if err == nil {
 		return nil
 	}
-	return fault.ErrServiceUnavail.Wrap(err, "сервис временно недоступен").WithOp(op)
+	return fault.ErrServiceUnavail.Wrap(err, "service temporarily unavailable").WithOp(op)
 }
 
 func notFoundErr(op, message string, err error) error {
@@ -73,16 +73,16 @@ func mapRepoErr(op string, err error) error {
 		return err
 	}
 	if errors.Is(err, eventstore.ErrCorruptEvent) {
-		return fault.ErrInternal.Wrap(err, "повреждённые данные").WithOp(op)
+		return fault.ErrInternal.Wrap(err, "corrupt data").WithOp(op)
 	}
 
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
 		switch pgErr.Code {
 		case "23505":
-			return fault.ErrConflict.Wrap(err, "конфликт данных").WithOp(op)
+			return fault.ErrConflict.Wrap(err, "data conflict").WithOp(op)
 		case "23503", "23514":
-			return fault.ErrUnprocessable.Wrap(err, "нарушено ограничение данных").WithOp(op)
+			return fault.ErrUnprocessable.Wrap(err, "data constraint violated").WithOp(op)
 		case "40001", "40P01", "55P03", "53300", "57P01":
 			return unavailableErr(op, err)
 		}

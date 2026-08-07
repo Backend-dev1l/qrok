@@ -10,12 +10,12 @@ import (
 	"qrok/internal/controlplane/infrastructure/auth"
 	"qrok/internal/controlplane/infrastructure/delivery"
 	"qrok/internal/controlplane/infrastructure/eventstore"
-	"qrok/internal/controlplane/model"
+	"qrok/internal/controlplane/infrastructure/models"
 )
 
 // ReplayService schedules replay deliveries.
 type ReplayService interface {
-	Replay(ctx context.Context, subject *model.Subject, eventID, target string) (*ReplayResult, error)
+	Replay(ctx context.Context, subject *models.Subject, eventID, target string) (*ReplayResult, error)
 }
 
 // ReplayResult is the outcome of scheduling a replay.
@@ -42,10 +42,10 @@ func NewReplayService(events eventstore.Repository, deliveries delivery.Reposito
 	}
 }
 
-func (s *replayService) Replay(ctx context.Context, subject *model.Subject, eventID, target string) (*ReplayResult, error) {
+func (s *replayService) Replay(ctx context.Context, subject *models.Subject, eventID, target string) (*ReplayResult, error) {
 	const op = "replay.replay"
 	if eventID == "" {
-		return nil, validationErr(op, "event_id обязателен")
+		return nil, validationErr(op, "event_id is required")
 	}
 	if target == "" {
 		target = "*"
@@ -55,7 +55,7 @@ func (s *replayService) Replay(ctx context.Context, subject *model.Subject, even
 	}
 
 	var (
-		ev  *model.Event
+		ev  *models.Event
 		err error
 	)
 	if subject != nil && !subject.AllowAll && subject.ProjectID != "" {
@@ -64,21 +64,21 @@ func (s *replayService) Replay(ctx context.Context, subject *model.Subject, even
 		ev, err = s.events.GetByID(ctx, eventID)
 	}
 	if err != nil {
-		return nil, notFoundErr(op, "событие не найдено", err)
+		return nil, notFoundErr(op, "event not found", err)
 	}
 
 	payload, err := s.events.GetPayload(ctx, ev)
 	if err != nil {
-		return nil, notFoundErr(op, "payload отсутствует", err)
+		return nil, notFoundErr(op, "payload missing", err)
 	}
 
 	deliveryID := ulid.MustNew(ulid.Now(), rand.Reader).String()
-	if err := s.deliveries.CreatePending(ctx, &model.Delivery{
+	if err := s.deliveries.CreatePending(ctx, &models.Delivery{
 		ID:       deliveryID,
 		EventID:  eventID,
 		TargetID: target,
-		Kind:     model.DeliveryKindReplay,
-		Status:   model.DeliveryStatusPending,
+		Kind:     models.DeliveryKindReplay,
+		Status:   models.DeliveryStatusPending,
 	}); err != nil {
 		return nil, mapRepoErr(op, err)
 	}
@@ -91,6 +91,6 @@ func (s *replayService) Replay(ctx context.Context, subject *model.Subject, even
 		DeliveryID: deliveryID,
 		EventID:    eventID,
 		TargetID:   target,
-		Status:     string(model.DeliveryStatusPending),
+		Status:     string(models.DeliveryStatusPending),
 	}, nil
 }

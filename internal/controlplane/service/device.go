@@ -9,15 +9,15 @@ import (
 	"github.com/oklog/ulid/v2"
 
 	"qrok/internal/controlplane/infrastructure/auth"
-	"qrok/internal/controlplane/model"
+	"qrok/internal/controlplane/infrastructure/models"
 	"qrok/pkg/fault"
 )
 
 // DeviceService implements the OAuth device authorization flow.
 type DeviceService interface {
-	Start(ctx context.Context, projectID, verificationURI string) (*model.DeviceStart, error)
+	Start(ctx context.Context, projectID, verificationURI string) (*models.DeviceStart, error)
 	Approve(ctx context.Context, userCode, projectID string) error
-	Poll(ctx context.Context, deviceCode string) (*model.DeviceTokenPoll, error)
+	Poll(ctx context.Context, deviceCode string) (*models.DeviceTokenPoll, error)
 }
 
 type deviceService struct {
@@ -32,7 +32,7 @@ func NewDeviceService(repo auth.Repository) DeviceService {
 	}
 }
 
-func (s *deviceService) Start(ctx context.Context, projectID, verificationURI string) (*model.DeviceStart, error) {
+func (s *deviceService) Start(ctx context.Context, projectID, verificationURI string) (*models.DeviceStart, error) {
 	const op = "device.start"
 
 	deviceCode, err := auth.RandomURLSafe(32)
@@ -51,7 +51,7 @@ func (s *deviceService) Start(ctx context.Context, projectID, verificationURI st
 		return nil, mapRepoErr(op, err)
 	}
 
-	return &model.DeviceStart{
+	return &models.DeviceStart{
 		DeviceCode:      deviceCode,
 		UserCode:        userCode,
 		VerificationURI: verificationURI,
@@ -65,23 +65,23 @@ func (s *deviceService) Approve(ctx context.Context, userCode, projectID string)
 
 	userCode = auth.NormalizeUserCode(userCode)
 	if userCode == "" {
-		return validationErr(op, "user_code обязателен")
+		return validationErr(op, "user_code is required")
 	}
 	if projectID == "" {
-		return validationErr(op, "project_id обязателен")
+		return validationErr(op, "project_id is required")
 	}
 
 	return s.repo.WithinTx(ctx, func(tx auth.TxRepository) error {
 		deviceHash, status, expiresAt, err := tx.GetDeviceByUserCodeForUpdate(ctx, userCode)
 		if err != nil {
-			return notFoundErr(op, "неизвестный user_code", err)
+			return notFoundErr(op, "unknown user_code", err)
 		}
-		if status != model.DeviceStatusPending {
-			return fault.ErrConflict.Newf("сессия уже в статусе %s", status).WithOp(op)
+		if status != models.DeviceStatusPending {
+			return fault.ErrConflict.Newf("session already in status %s", status).WithOp(op)
 		}
 		if s.now().UTC().After(expiresAt) {
-			_ = tx.UpdateDeviceStatus(ctx, deviceHash, model.DeviceStatusExpired)
-			return fault.ErrUnauthorized.New("код истёк, запустите qrok login снова").WithOp(op)
+			_ = tx.UpdateDeviceStatus(ctx, deviceHash, models.DeviceStatusExpired)
+			return fault.ErrUnauthorized.New("code expired, run qrok login again").WithOp(op)
 		}
 
 		exists, err := tx.ProjectExists(ctx, projectID)
@@ -89,7 +89,7 @@ func (s *deviceService) Approve(ctx context.Context, userCode, projectID string)
 			return mapRepoErr(op, err)
 		}
 		if !exists {
-			return fault.ErrNotFound.New("project не найден").WithOp(op).WithArg("project_id", projectID)
+			return fault.ErrNotFound.New("project not found").WithOp(op).WithArg("project_id", projectID)
 		}
 
 		plaintext, tokenHash, err := auth.GenerateDevToken()
@@ -108,54 +108,54 @@ func (s *deviceService) Approve(ctx context.Context, userCode, projectID string)
 	})
 }
 
-func (s *deviceService) Poll(ctx context.Context, deviceCode string) (*model.DeviceTokenPoll, error) {
+func (s *deviceService) Poll(ctx context.Context, deviceCode string) (*models.DeviceTokenPoll, error) {
 	const op = "device.poll"
 	if deviceCode == "" {
-		return nil, validationErr(op, "device_code обязателен")
+		return nil, validationErr(op, "device_code is required")
 	}
 
 	deviceHash := auth.HashDeviceCode(deviceCode)
 	status, expiresAt, accessToken, err := s.repo.GetDeviceByHash(ctx, deviceHash)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return &model.DeviceTokenPoll{
+			return &models.DeviceTokenPoll{
 				Error:       "invalid_grant",
-				Description: "неизвестный device_code",
+				Description: "unknown device_code",
 			}, nil
 		}
 		return nil, mapRepoErr(op, err)
 	}
 
-	if s.now().UTC().After(expiresAt) && status == model.DeviceStatusPending {
-		_ = s.repo.UpdateDeviceStatus(ctx, deviceHash, model.DeviceStatusExpired)
-		status = model.DeviceStatusExpired
+	if s.now().UTC().After(expiresAt) && status == models.DeviceStatusPending {
+		_ = s.repo.UpdateDeviceStatus(ctx, deviceHash, models.DeviceStatusExpired)
+		status = models.DeviceStatusExpired
 	}
 
 	switch status {
-	case model.DeviceStatusPending:
-		return &model.DeviceTokenPoll{
+	case models.DeviceStatusPending:
+		return &models.DeviceTokenPoll{
 			Error:       "authorization_pending",
-			Description: "ожидается подтверждение в дашборде",
+			Description: "dashboard approval pending",
 		}, nil
-	case model.DeviceStatusDenied:
-		return &model.DeviceTokenPoll{Error: "access_denied", Description: "доступ отклонён"}, nil
-	case model.DeviceStatusExpired:
-		return &model.DeviceTokenPoll{Error: "expired_token", Description: "код истёк"}, nil
-	case model.DeviceStatusConsumed:
-		return &model.DeviceTokenPoll{Error: "invalid_grant", Description: "токен уже выдан"}, nil
-	case model.DeviceStatusApproved:
+	case models.DeviceStatusDenied:
+		return &models.DeviceTokenPoll{Error: "access_denied", Description: "access denied"}, nil
+	case models.DeviceStatusExpired:
+		return &models.DeviceTokenPoll{Error: "expired_token", Description: "code expired"}, nil
+	case models.DeviceStatusConsumed:
+		return &models.DeviceTokenPoll{Error: "invalid_grant", Description: "token already issued"}, nil
+	case models.DeviceStatusApproved:
 		if accessToken == nil || *accessToken == "" {
-			return nil, fault.ErrInternal.New("повреждённая device-сессия").WithOp(op)
+			return nil, fault.ErrInternal.New("corrupt device session").WithOp(op)
 		}
 		token := *accessToken
 		if err := s.repo.ConsumeDeviceToken(ctx, deviceHash); err != nil {
 			return nil, mapRepoErr(op, err)
 		}
-		return &model.DeviceTokenPoll{
+		return &models.DeviceTokenPoll{
 			AccessToken: token,
 			TokenType:   "Bearer",
 		}, nil
 	default:
-		return nil, fault.ErrInternal.Newf("неизвестный статус device-сессии: %s", status).WithOp(op)
+		return nil, fault.ErrInternal.Newf("unknown device session status: %s", status).WithOp(op)
 	}
 }

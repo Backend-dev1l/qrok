@@ -93,7 +93,7 @@ func (c *Agent) validate() error {
 		return validationErr("agent.topics обязателен (хотя бы один топик)")
 	}
 	if c.Agent.SourceType != "kafka" {
-		return validationErr("пока поддерживается только agent.source_type=kafka")
+		return validationErr("only agent.source_type=kafka is supported for now")
 	}
 	if len(c.Kafka.Brokers) == 0 {
 		return validationErr("kafka.brokers обязателен")

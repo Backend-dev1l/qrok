@@ -5,7 +5,7 @@ import (
 	"log/slog"
 
 	"qrok/internal/bus/inproc"
-	"qrok/internal/controlplane/model"
+	"qrok/internal/controlplane/infrastructure/models"
 	"qrok/internal/controlplane/service"
 	qrokv1 "qrok/internal/proto/qrok/v1"
 	"qrok/pkg/fault"
@@ -48,11 +48,11 @@ func NewServer(cfg Config, eventBus inproc.EventBus, events service.EventService
 func (s *Server) AgentStream(stream grpc.BidiStreamingServer[qrokv1.AgentStreamRequest, qrokv1.AgentStreamResponse]) error {
 	first, err := stream.Recv()
 	if err != nil {
-		return fault.ErrBadRequest.Wrap(err, "не удалось прочитать hello").WithOp("gateway.agent_stream")
+		return fault.ErrBadRequest.Wrap(err, "failed to read hello").WithOp("gateway.agent_stream")
 	}
 	hello := first.GetHello()
 	if hello == nil {
-		return fault.ErrBadRequest.New("первое сообщение должно быть AgentHello").WithOp("gateway.agent_stream")
+		return fault.ErrBadRequest.New("first message must be AgentHello").WithOp("gateway.agent_stream")
 	}
 
 	token, err := bearerToken(stream.Context())
@@ -60,14 +60,14 @@ func (s *Server) AgentStream(stream grpc.BidiStreamingServer[qrokv1.AgentStreamR
 		return err
 	}
 	if s.auth == nil {
-		return fault.ErrInternal.New("auth не настроен").WithOp("gateway.agent_stream")
+		return fault.ErrInternal.New("auth is not configured").WithOp("gateway.agent_stream")
 	}
 	subject, err := s.auth.AuthenticateAgent(stream.Context(), token, hello.GetTunnelId())
 	if err != nil {
 		return err
 	}
 
-	s.log.Info("агент подключился",
+	s.log.Info("agent connected",
 		"tunnel_id", hello.GetTunnelId(),
 		"source_type", hello.GetSourceType(),
 		"topics", hello.GetTopics(),
@@ -87,7 +87,7 @@ func (s *Server) AgentStream(stream grpc.BidiStreamingServer[qrokv1.AgentStreamR
 		}
 
 		if s.events == nil {
-			return fault.ErrInternal.New("event service не настроен").WithOp("gateway.agent_stream")
+			return fault.ErrInternal.New("event service is not configured").WithOp("gateway.agent_stream")
 		}
 
 		row, err := service.EventFromProto(ev)
@@ -108,10 +108,10 @@ func (s *Server) AgentStream(stream grpc.BidiStreamingServer[qrokv1.AgentStreamR
 		if err := stream.Send(&qrokv1.AgentStreamResponse{
 			Msg: &qrokv1.AgentStreamResponse_Ack{Ack: &qrokv1.Ack{EventId: ev.GetEventId()}},
 		}); err != nil {
-			return fault.ErrServiceUnavail.Wrap(err, "не удалось отправить ack").WithOp("gateway.agent_stream")
+			return fault.ErrServiceUnavail.Wrap(err, "failed to send ack").WithOp("gateway.agent_stream")
 		}
 		if inserted {
-			s.log.Debug("событие принято", "event_id", ev.GetEventId(), "tunnel_id", ev.GetTunnelId())
+			s.log.Debug("event accepted", "event_id", ev.GetEventId(), "tunnel_id", ev.GetTunnelId())
 		}
 	}
 }
@@ -119,23 +119,23 @@ func (s *Server) AgentStream(stream grpc.BidiStreamingServer[qrokv1.AgentStreamR
 func (s *Server) ListenStream(stream grpc.BidiStreamingServer[qrokv1.ListenStreamRequest, qrokv1.ListenStreamResponse]) error {
 	first, err := stream.Recv()
 	if err != nil {
-		return fault.ErrBadRequest.Wrap(err, "не удалось прочитать subscribe").WithOp("gateway.listen_stream")
+		return fault.ErrBadRequest.Wrap(err, "failed to read subscribe").WithOp("gateway.listen_stream")
 	}
 	sub := first.GetSubscribe()
 	if sub == nil {
-		return fault.ErrBadRequest.New("первое сообщение должно быть Subscribe").WithOp("gateway.listen_stream")
+		return fault.ErrBadRequest.New("first message must be Subscribe").WithOp("gateway.listen_stream")
 	}
 
 	if !s.cfg.AllowInsecureListen {
 		token, err := bearerToken(stream.Context())
 		if err != nil {
 			return fault.ErrUnauthorized.
-				New("ListenStream требует dev-токен (qrok login); для локальной разработки включите gateway.allow_insecure_listen").
+				New("ListenStream requires dev token (qrok login); for local development enable gateway.allow_insecure_listen").
 				WithOp("gateway.listen_stream").
-				WithHint("выполните qrok login или включите gateway.allow_insecure_listen только для dev")
+				WithHint("run qrok login or enable gateway.allow_insecure_listen for dev only")
 		}
 		if s.auth == nil {
-			return fault.ErrInternal.New("auth не настроен").WithOp("gateway.listen_stream")
+			return fault.ErrInternal.New("auth is not configured").WithOp("gateway.listen_stream")
 		}
 		if _, err := s.auth.AuthenticateDev(stream.Context(), token, sub.GetTunnelId()); err != nil {
 			return err
@@ -151,7 +151,7 @@ func (s *Server) ListenStream(stream grpc.BidiStreamingServer[qrokv1.ListenStrea
 	}
 	defer unsubBus()
 
-	s.log.Info("dev-клиент подписался",
+	s.log.Info("dev client subscribed",
 		"tunnel_id", sub.GetTunnelId(),
 		"topics", sub.GetTopics(),
 	)
@@ -200,7 +200,7 @@ func (s *Server) recordDeliveryResult(ctx context.Context, result *qrokv1.Delive
 	if s.deliveries == nil {
 		return
 	}
-	err := s.deliveries.RecordResult(ctx, &model.DeliveryResult{
+	err := s.deliveries.RecordResult(ctx, &models.DeliveryResult{
 		DeliveryID: result.GetDeliveryId(),
 		EventID:    result.GetEventId(),
 		StatusCode: result.GetStatusCode(),
@@ -208,7 +208,7 @@ func (s *Server) recordDeliveryResult(ctx context.Context, result *qrokv1.Delive
 		LatencyMS:  int32(result.GetLatencyMs()),
 	})
 	if err != nil {
-		s.log.LogAttrs(ctx, slog.LevelWarn, "не удалось сохранить DeliveryResult", fault.LogAttrs(err)...)
+		s.log.LogAttrs(ctx, slog.LevelWarn, "failed to save DeliveryResult", fault.LogAttrs(err)...)
 		return
 	}
 	s.log.Debug("delivery result",

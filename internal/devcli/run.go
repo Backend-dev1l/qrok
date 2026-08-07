@@ -64,13 +64,13 @@ func Run(ctx context.Context, cfg *config.Listen, log *slog.Logger) error {
 			}
 
 			if result.Error != "" {
-				log.Warn("доставка на localhost не удалась",
+				log.Warn("localhost delivery failed",
 					"event_id", ev.GetEventId(),
 					"status", result.StatusCode,
 					"error", result.Error,
 					"latency_ms", result.LatencyMS)
 			} else {
-				log.Info("событие доставлено на localhost",
+				log.Info("event delivered to localhost",
 					"event_id", ev.GetEventId(),
 					"topic", ev.GetTopic(),
 					"status", result.StatusCode,

@@ -47,13 +47,13 @@ func (c *ListenClient) Run(
 
 	stream, err := c.client.ListenStream(streamCtx)
 	if err != nil {
-		return fault.ErrServiceUnavail.Wrap(err, "не удалось открыть ListenStream").WithOp("devcli.stream.open")
+		return fault.ErrServiceUnavail.Wrap(err, "failed to open ListenStream").WithOp("devcli.stream.open")
 	}
 
 	if err := stream.Send(&qrokv1.ListenStreamRequest{
 		Msg: &qrokv1.ListenStreamRequest_Subscribe{Subscribe: sub},
 	}); err != nil {
-		return fault.ErrServiceUnavail.Wrap(err, "не удалось отправить subscribe").WithOp("devcli.stream.subscribe")
+		return fault.ErrServiceUnavail.Wrap(err, "failed to send subscribe").WithOp("devcli.stream.subscribe")
 	}
 
 	sendResult := func(result *qrokv1.DeliveryResult) error {
@@ -71,7 +71,7 @@ func (c *ListenClient) Run(
 					recvDone <- nil
 					return
 				}
-				recvDone <- fault.ErrServiceUnavail.Wrap(err, "ошибка чтения ListenStream").WithOp("devcli.stream.recv")
+				recvDone <- fault.ErrServiceUnavail.Wrap(err, "ListenStream read error").WithOp("devcli.stream.recv")
 				return
 			}
 			ev := resp.GetEvent()

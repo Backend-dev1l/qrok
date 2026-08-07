@@ -33,7 +33,7 @@ func Auth(cfg AuthConfig) func(http.Handler) http.Handler {
 				return
 			}
 			if cfg.Auth == nil {
-				fault.WriteHTTPError(r.Context(), w, fault.ErrInternal.New("auth не настроен").WithOp("middleware.auth"))
+				fault.WriteHTTPError(r.Context(), w, fault.ErrInternal.New("auth is not configured").WithOp("middleware.auth"))
 				return
 			}
 
@@ -52,17 +52,17 @@ func bearerToken(r *http.Request) (string, error) {
 	raw := strings.TrimSpace(r.Header.Get("Authorization"))
 	if raw == "" {
 		return "", fault.ErrUnauthorized.
-			New("отсутствует Authorization").
+			New("missing Authorization header").
 			WithOp("middleware.auth").
-			WithHint("передайте заголовок Authorization: Bearer <token>")
+			WithHint("set header Authorization: Bearer <token>")
 	}
 	const prefix = "bearer "
 	if len(raw) < len(prefix) || !strings.EqualFold(raw[:len(prefix)], prefix) {
-		return "", fault.ErrUnauthorized.New("ожидается Bearer-токен").WithOp("middleware.auth")
+		return "", fault.ErrUnauthorized.New("expected Bearer token").WithOp("middleware.auth")
 	}
 	token := strings.TrimSpace(raw[len(prefix):])
 	if token == "" {
-		return "", fault.ErrUnauthorized.New("пустой Bearer-токен").WithOp("middleware.auth")
+		return "", fault.ErrUnauthorized.New("empty Bearer token").WithOp("middleware.auth")
 	}
 	return token, nil
 }

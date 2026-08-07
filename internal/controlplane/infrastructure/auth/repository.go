@@ -7,7 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"qrok/internal/controlplane/model"
+	"qrok/internal/controlplane/infrastructure/models"
 )
 
 // Repository provides auth-related persistence operations.
@@ -20,8 +20,8 @@ type Repository interface {
 	ProjectExists(ctx context.Context, projectID string) (bool, error)
 
 	InsertDeviceAuthorization(ctx context.Context, deviceHash, userCode, projectID string, pollInterval int, expiresAt time.Time) error
-	GetDeviceByHash(ctx context.Context, deviceHash string) (status model.DeviceStatus, expiresAt time.Time, accessToken *string, err error)
-	UpdateDeviceStatus(ctx context.Context, deviceHash string, status model.DeviceStatus) error
+	GetDeviceByHash(ctx context.Context, deviceHash string) (status models.DeviceStatus, expiresAt time.Time, accessToken *string, err error)
+	UpdateDeviceStatus(ctx context.Context, deviceHash string, status models.DeviceStatus) error
 	ConsumeDeviceToken(ctx context.Context, deviceHash string) error
 	WithinTx(ctx context.Context, fn func(TxRepository) error) error
 
@@ -30,8 +30,8 @@ type Repository interface {
 
 // TxRepository exposes auth persistence operations inside a transaction.
 type TxRepository interface {
-	GetDeviceByUserCodeForUpdate(ctx context.Context, userCode string) (deviceHash string, status model.DeviceStatus, expiresAt time.Time, err error)
-	UpdateDeviceStatus(ctx context.Context, deviceHash string, status model.DeviceStatus) error
+	GetDeviceByUserCodeForUpdate(ctx context.Context, userCode string) (deviceHash string, status models.DeviceStatus, expiresAt time.Time, err error)
+	UpdateDeviceStatus(ctx context.Context, deviceHash string, status models.DeviceStatus) error
 	ApproveDevice(ctx context.Context, deviceHash, projectID, devTokenID, accessToken string) error
 	InsertDevToken(ctx context.Context, id, projectID, tokenHash, name string) error
 	ProjectExists(ctx context.Context, projectID string) (bool, error)
@@ -116,11 +116,11 @@ func (r *repository) InsertDeviceAuthorization(ctx context.Context, deviceHash, 
 		INSERT INTO device_authorizations (
 			device_code_hash, user_code, status, project_id, poll_interval_sec, expires_at
 		) VALUES ($1, $2, $3, NULLIF($4, ''), $5, $6)
-	`, deviceHash, userCode, string(model.DeviceStatusPending), projectID, pollInterval, expiresAt)
+	`, deviceHash, userCode, string(models.DeviceStatusPending), projectID, pollInterval, expiresAt)
 	return err
 }
 
-func (r *repository) GetDeviceByHash(ctx context.Context, deviceHash string) (model.DeviceStatus, time.Time, *string, error) {
+func (r *repository) GetDeviceByHash(ctx context.Context, deviceHash string) (models.DeviceStatus, time.Time, *string, error) {
 	var status string
 	var expiresAt time.Time
 	var accessToken *string
@@ -129,10 +129,10 @@ func (r *repository) GetDeviceByHash(ctx context.Context, deviceHash string) (mo
 		FROM device_authorizations
 		WHERE device_code_hash = $1
 	`, deviceHash).Scan(&status, &expiresAt, &accessToken)
-	return model.DeviceStatus(status), expiresAt, accessToken, err
+	return models.DeviceStatus(status), expiresAt, accessToken, err
 }
 
-func (r *repository) UpdateDeviceStatus(ctx context.Context, deviceHash string, status model.DeviceStatus) error {
+func (r *repository) UpdateDeviceStatus(ctx context.Context, deviceHash string, status models.DeviceStatus) error {
 	_, err := r.pool.Exec(ctx, `
 		UPDATE device_authorizations SET status = $1 WHERE device_code_hash = $2
 	`, string(status), deviceHash)
@@ -144,7 +144,7 @@ func (r *repository) ConsumeDeviceToken(ctx context.Context, deviceHash string) 
 		UPDATE device_authorizations
 		SET status = $1, access_token_plaintext = NULL
 		WHERE device_code_hash = $2
-	`, string(model.DeviceStatusConsumed), deviceHash)
+	`, string(models.DeviceStatusConsumed), deviceHash)
 	return err
 }
 
@@ -173,7 +173,7 @@ type txRepository struct {
 	tx pgx.Tx
 }
 
-func (r *txRepository) GetDeviceByUserCodeForUpdate(ctx context.Context, userCode string) (string, model.DeviceStatus, time.Time, error) {
+func (r *txRepository) GetDeviceByUserCodeForUpdate(ctx context.Context, userCode string) (string, models.DeviceStatus, time.Time, error) {
 	var deviceHash string
 	var status string
 	var expiresAt time.Time
@@ -183,10 +183,10 @@ func (r *txRepository) GetDeviceByUserCodeForUpdate(ctx context.Context, userCod
 		WHERE user_code = $1
 		FOR UPDATE
 	`, userCode).Scan(&deviceHash, &status, &expiresAt)
-	return deviceHash, model.DeviceStatus(status), expiresAt, err
+	return deviceHash, models.DeviceStatus(status), expiresAt, err
 }
 
-func (r *txRepository) UpdateDeviceStatus(ctx context.Context, deviceHash string, status model.DeviceStatus) error {
+func (r *txRepository) UpdateDeviceStatus(ctx context.Context, deviceHash string, status models.DeviceStatus) error {
 	_, err := r.tx.Exec(ctx, `
 		UPDATE device_authorizations SET status = $1 WHERE device_code_hash = $2
 	`, string(status), deviceHash)
@@ -198,7 +198,7 @@ func (r *txRepository) ApproveDevice(ctx context.Context, deviceHash, projectID,
 		UPDATE device_authorizations
 		SET status = $1, project_id = $2, dev_token_id = $3, access_token_plaintext = $4
 		WHERE device_code_hash = $5
-	`, string(model.DeviceStatusApproved), projectID, devTokenID, accessToken, deviceHash)
+	`, string(models.DeviceStatusApproved), projectID, devTokenID, accessToken, deviceHash)
 	return err
 }
 

@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"qrok/internal/controlplane/infrastructure/auth"
-	"qrok/internal/controlplane/model"
+	"qrok/internal/controlplane/infrastructure/models"
 	"qrok/internal/controlplane/service"
 	"qrok/pkg/fault"
 )
@@ -42,7 +42,7 @@ func TestDeviceService(t *testing.T) {
 		hash := auth.HashDeviceCode("device-code-abc")
 		repo.addDevice(hash, deviceRec{
 			userCode:  "ABCD-EFGH",
-			status:    model.DeviceStatusPending,
+			status:    models.DeviceStatusPending,
 			expiresAt: time.Now().UTC().Add(time.Hour),
 		})
 
@@ -71,7 +71,7 @@ func TestDeviceService(t *testing.T) {
 		hash := auth.HashDeviceCode("device-code-xyz")
 		repo.addDevice(hash, deviceRec{
 			userCode:    "WXYZ-1234",
-			status:      model.DeviceStatusApproved,
+			status:      models.DeviceStatusApproved,
 			expiresAt:   time.Now().UTC().Add(time.Hour),
 			accessToken: &token,
 		})
@@ -85,7 +85,7 @@ func TestDeviceService(t *testing.T) {
 
 		status, _, accessToken, err := repo.GetDeviceByHash(ctx, hash)
 		require.NoError(t, err)
-		assert.Equal(t, model.DeviceStatusConsumed, status)
+		assert.Equal(t, models.DeviceStatusConsumed, status)
 		assert.Nil(t, accessToken)
 	})
 
@@ -96,7 +96,7 @@ func TestDeviceService(t *testing.T) {
 		hash := auth.HashDeviceCode("expired-code")
 		repo.addDevice(hash, deviceRec{
 			userCode:  "EXPI-RED1",
-			status:    model.DeviceStatusPending,
+			status:    models.DeviceStatusPending,
 			expiresAt: time.Now().UTC().Add(-time.Minute),
 		})
 
@@ -125,7 +125,7 @@ func TestDeviceService(t *testing.T) {
 		hash := auth.HashDeviceCode("approve-me")
 		repo.addDevice(hash, deviceRec{
 			userCode:  "APPR-OVE1",
-			status:    model.DeviceStatusPending,
+			status:    models.DeviceStatusPending,
 			expiresAt: time.Now().UTC().Add(time.Hour),
 		})
 
@@ -136,7 +136,7 @@ func TestDeviceService(t *testing.T) {
 
 		status, _, accessToken, err := repo.GetDeviceByHash(ctx, hash)
 		require.NoError(t, err)
-		assert.Equal(t, model.DeviceStatusApproved, status)
+		assert.Equal(t, models.DeviceStatusApproved, status)
 		require.NotNil(t, accessToken)
 		assert.NotEmpty(t, *accessToken)
 	})
@@ -158,7 +158,7 @@ func TestDeviceService(t *testing.T) {
 		repo.projects["prj-1"] = true
 		repo.addDevice("hash", deviceRec{
 			userCode:  "DONE-CODE",
-			status:    model.DeviceStatusApproved,
+			status:    models.DeviceStatusApproved,
 			expiresAt: time.Now().UTC().Add(time.Hour),
 		})
 

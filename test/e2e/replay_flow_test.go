@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"qrok/internal/config"
-	"qrok/internal/controlplane/model"
+	"qrok/internal/controlplane/infrastructure/models"
 	"qrok/internal/devcli"
 )
 
@@ -35,7 +35,7 @@ func TestReplayDeliverToLocalhost(t *testing.T) {
 	stack := startTestStack(t, ctx, pool, objects)
 
 	payload := []byte(`{"e2e":true}`)
-	_, err := stack.EventRepo.Insert(ctx, &model.Event{
+	_, err := stack.EventRepo.Insert(ctx, &models.Event{
 		ID:       eventID,
 		TunnelID: tunnelID,
 		Topic:    "demo",
@@ -65,7 +65,7 @@ func TestReplayDeliverToLocalhost(t *testing.T) {
 
 	time.Sleep(200 * time.Millisecond)
 
-	result, err := stack.Replay.Replay(ctx, &model.Subject{AllowAll: true}, eventID, "*")
+	result, err := stack.Replay.Replay(ctx, &models.Subject{AllowAll: true}, eventID, "*")
 	require.NoError(t, err)
 	require.NotEmpty(t, result.DeliveryID)
 
@@ -78,7 +78,7 @@ func TestReplayDeliverToLocalhost(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		rec, err := stack.Delivery.GetByID(ctx, result.DeliveryID)
-		return err == nil && rec.Status == model.DeliveryStatusDelivered
+		return err == nil && rec.Status == models.DeliveryStatusDelivered
 	}, 3*time.Second, 100*time.Millisecond, "delivery status not delivered")
 
 	cancel()

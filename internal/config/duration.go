@@ -20,7 +20,7 @@ func (d *Duration) UnmarshalYAML(node *yaml.Node) error {
 	parsed, err := time.ParseDuration(s)
 	if err != nil {
 		return fault.ErrValidation.
-			Wrapf(err, "невалидная длительность %q", s).
+			Wrapf(err, "invalid duration %q", s).
 			WithOp("config.parse_duration").
 			WithHint(`формат Go duration: "30s", "5m", "1h30m"`)
 	}

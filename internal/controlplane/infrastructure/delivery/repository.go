@@ -6,16 +6,16 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"qrok/internal/controlplane/model"
+	"qrok/internal/controlplane/infrastructure/models"
 )
 
 // Repository stores delivery records in Postgres.
 type Repository interface {
-	CreatePending(ctx context.Context, rec *model.Delivery) error
-	UpsertResult(ctx context.Context, rec *model.Delivery) error
-	GetByID(ctx context.Context, id string) (*model.Delivery, error)
-	ListByEventID(ctx context.Context, eventID string) ([]*model.Delivery, error)
-	ListLatestByEventIDs(ctx context.Context, eventIDs []string) (map[string]*model.Delivery, error)
+	CreatePending(ctx context.Context, rec *models.Delivery) error
+	UpsertResult(ctx context.Context, rec *models.Delivery) error
+	GetByID(ctx context.Context, id string) (*models.Delivery, error)
+	ListByEventID(ctx context.Context, eventID string) ([]*models.Delivery, error)
+	ListLatestByEventIDs(ctx context.Context, eventIDs []string) (map[string]*models.Delivery, error)
 }
 
 type repository struct {
@@ -26,7 +26,7 @@ func NewRepository(pool *pgxpool.Pool) Repository {
 	return &repository{pool: pool}
 }
 
-func (r *repository) CreatePending(ctx context.Context, rec *model.Delivery) error {
+func (r *repository) CreatePending(ctx context.Context, rec *models.Delivery) error {
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO deliveries (id, event_id, target_id, kind, status)
 		VALUES ($1, $2, $3, $4, $5)
@@ -34,7 +34,7 @@ func (r *repository) CreatePending(ctx context.Context, rec *model.Delivery) err
 	return err
 }
 
-func (r *repository) UpsertResult(ctx context.Context, rec *model.Delivery) error {
+func (r *repository) UpsertResult(ctx context.Context, rec *models.Delivery) error {
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO deliveries (id, event_id, target_id, kind, status, status_code, error, latency_ms)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -48,13 +48,13 @@ func (r *repository) UpsertResult(ctx context.Context, rec *model.Delivery) erro
 	return err
 }
 
-func (r *repository) GetByID(ctx context.Context, id string) (*model.Delivery, error) {
+func (r *repository) GetByID(ctx context.Context, id string) (*models.Delivery, error) {
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, event_id, target_id, kind, status, status_code, error, latency_ms, created_at
 		FROM deliveries WHERE id = $1
 	`, id)
 
-	var rec model.Delivery
+	var rec models.Delivery
 	var kind string
 	var status string
 	var statusCode *int32
@@ -69,8 +69,8 @@ func (r *repository) GetByID(ctx context.Context, id string) (*model.Delivery, e
 		return nil, err
 	}
 
-	rec.Kind = model.DeliveryKind(kind)
-	rec.Status = model.DeliveryStatus(status)
+	rec.Kind = models.DeliveryKind(kind)
+	rec.Status = models.DeliveryStatus(status)
 	rec.StatusCode = statusCode
 	rec.LatencyMS = latency
 	if errText != nil {
@@ -79,7 +79,7 @@ func (r *repository) GetByID(ctx context.Context, id string) (*model.Delivery, e
 	return &rec, nil
 }
 
-func (r *repository) ListByEventID(ctx context.Context, eventID string) ([]*model.Delivery, error) {
+func (r *repository) ListByEventID(ctx context.Context, eventID string) ([]*models.Delivery, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, event_id, target_id, kind, status, status_code, error, latency_ms, created_at
 		FROM deliveries
@@ -94,9 +94,9 @@ func (r *repository) ListByEventID(ctx context.Context, eventID string) ([]*mode
 	return scanDeliveries(rows)
 }
 
-func (r *repository) ListLatestByEventIDs(ctx context.Context, eventIDs []string) (map[string]*model.Delivery, error) {
+func (r *repository) ListLatestByEventIDs(ctx context.Context, eventIDs []string) (map[string]*models.Delivery, error) {
 	if len(eventIDs) == 0 {
-		return map[string]*model.Delivery{}, nil
+		return map[string]*models.Delivery{}, nil
 	}
 
 	rows, err := r.pool.Query(ctx, `
@@ -115,7 +115,7 @@ func (r *repository) ListLatestByEventIDs(ctx context.Context, eventIDs []string
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[string]*model.Delivery, len(list))
+	out := make(map[string]*models.Delivery, len(list))
 	for _, rec := range list {
 		out[rec.EventID] = rec
 	}
@@ -128,10 +128,10 @@ type rowScanner interface {
 	Err() error
 }
 
-func scanDeliveries(rows rowScanner) ([]*model.Delivery, error) {
-	var out []*model.Delivery
+func scanDeliveries(rows rowScanner) ([]*models.Delivery, error) {
+	var out []*models.Delivery
 	for rows.Next() {
-		var rec model.Delivery
+		var rec models.Delivery
 		var kind string
 		var status string
 		var statusCode *int32
@@ -145,8 +145,8 @@ func scanDeliveries(rows rowScanner) ([]*model.Delivery, error) {
 			return nil, err
 		}
 
-		rec.Kind = model.DeliveryKind(kind)
-		rec.Status = model.DeliveryStatus(status)
+		rec.Kind = models.DeliveryKind(kind)
+		rec.Status = models.DeliveryStatus(status)
 		rec.StatusCode = statusCode
 		rec.LatencyMS = latency
 		if errText != nil {

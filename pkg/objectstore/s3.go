@@ -34,9 +34,9 @@ func New(ctx context.Context, cfg Config) (*Client, error) {
 	})
 	if err != nil {
 		return nil, fault.ErrServiceUnavail.
-			Wrap(err, "не удалось создать S3-клиент").
+			Wrap(err, "failed to create S3 client").
 			WithOp("objectstore.new").
-			WithHint("проверьте s3.endpoint и credentials в конфиге")
+			WithHint("check s3.endpoint and credentials in config")
 	}
 
 	c := &Client{client: client, bucket: cfg.Bucket}
@@ -50,7 +50,7 @@ func (c *Client) ensureBucket(ctx context.Context) error {
 	exists, err := c.client.BucketExists(ctx, c.bucket)
 	if err != nil {
 		return fault.ErrServiceUnavail.
-			Wrap(err, "не удалось проверить S3-бакет").
+			Wrap(err, "failed to check S3 bucket").
 			WithOp("objectstore.ensure_bucket")
 	}
 	if exists {
@@ -58,7 +58,7 @@ func (c *Client) ensureBucket(ctx context.Context) error {
 	}
 	if err := c.client.MakeBucket(ctx, c.bucket, minio.MakeBucketOptions{}); err != nil {
 		return fault.ErrServiceUnavail.
-			Wrap(err, "не удалось создать S3-бакет").
+			Wrap(err, "failed to create S3 bucket").
 			WithOp("objectstore.ensure_bucket")
 	}
 	return nil
@@ -70,7 +70,7 @@ func (c *Client) Put(ctx context.Context, key string, data []byte) error {
 	})
 	if err != nil {
 		return fault.ErrServiceUnavail.
-			Wrap(err, "не удалось записать объект в S3").
+			Wrap(err, "failed to write object to S3").
 			WithOp("objectstore.put").
 			WithArg("key", key)
 	}
@@ -81,7 +81,7 @@ func (c *Client) Get(ctx context.Context, key string) ([]byte, error) {
 	obj, err := c.client.GetObject(ctx, c.bucket, key, minio.GetObjectOptions{})
 	if err != nil {
 		return nil, fault.ErrServiceUnavail.
-			Wrap(err, "не удалось прочитать объект из S3").
+			Wrap(err, "failed to read object from S3").
 			WithOp("objectstore.get").
 			WithArg("key", key)
 	}
@@ -91,12 +91,12 @@ func (c *Client) Get(ctx context.Context, key string) ([]byte, error) {
 	if err != nil {
 		if minio.ToErrorResponse(err).Code == "NoSuchKey" {
 			return nil, fault.ErrNotFound.
-				New("объект не найден в S3").
+				New("object not found in S3").
 				WithOp("objectstore.get").
 				WithArg("key", key)
 		}
 		return nil, fault.ErrServiceUnavail.
-			Wrap(err, "не удалось прочитать тело объекта S3").
+			Wrap(err, "failed to read S3 object body").
 			WithOp("objectstore.get").
 			WithArg("key", key)
 	}

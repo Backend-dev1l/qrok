@@ -13,10 +13,10 @@ func TestPrettyHandlerOutput(t *testing.T) {
 	var buf bytes.Buffer
 	l := slog.New(NewPrettyHandler(&buf, &PrettyOptions{NoColor: true}))
 
-	l.Info("событие доставлено", "tunnel", "orders", "latency_ms", 12)
+	l.Info("event delivered", "tunnel", "orders", "latency_ms", 12)
 
 	out := buf.String()
-	for _, want := range []string{"INF", "событие доставлено", "tunnel=orders", "latency_ms=12"} {
+	for _, want := range []string{"INF", "event delivered", "tunnel=orders", "latency_ms=12"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("в выводе нет %q:\n%s", want, out)
 		}
@@ -32,7 +32,7 @@ func TestPrettyHandlerColor(t *testing.T) {
 	var buf bytes.Buffer
 	l := slog.New(NewPrettyHandler(&buf, nil))
 
-	l.Error("всё сломалось")
+	l.Error("everything broke")
 
 	if !strings.Contains(buf.String(), ansiRed) {
 		t.Errorf("error-уровень должен быть красным:\n%q", buf.String())
@@ -43,12 +43,12 @@ func TestPrettyHandlerLevels(t *testing.T) {
 	var buf bytes.Buffer
 	l := slog.New(NewPrettyHandler(&buf, &PrettyOptions{Level: slog.LevelWarn, NoColor: true}))
 
-	l.Info("мимо")
-	l.Warn("предупреждение")
-	l.Error("ошибка")
+	l.Info("miss")
+	l.Warn("warning")
+	l.Error("error")
 
 	out := buf.String()
-	if strings.Contains(out, "мимо") {
+	if strings.Contains(out, "miss") {
 		t.Error("info-запись прошла при уровне warn")
 	}
 	if !strings.Contains(out, "WRN") || !strings.Contains(out, "ERR") {
@@ -124,7 +124,7 @@ func TestMultiHandlerPerHandlerLevels(t *testing.T) {
 		slog.NewJSONHandler(&errorBuf, &slog.HandlerOptions{Level: slog.LevelError}),
 	))
 
-	l.Debug("только в первый")
+	l.Debug("only in first")
 
 	if debugBuf.Len() == 0 {
 		t.Error("debug-хендлер должен был принять запись")

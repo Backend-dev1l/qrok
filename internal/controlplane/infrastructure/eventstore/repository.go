@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"qrok/internal/controlplane/model"
+	"qrok/internal/controlplane/infrastructure/models"
 	"qrok/pkg/objectstore"
 )
 
@@ -24,11 +24,11 @@ type ObjectStore interface {
 
 // Repository persists and reads events.
 type Repository interface {
-	Insert(ctx context.Context, ev *model.Event) (bool, error)
-	GetByID(ctx context.Context, id string) (*model.Event, error)
-	GetByIDForProject(ctx context.Context, projectID, eventID string) (*model.Event, error)
-	GetPayload(ctx context.Context, ev *model.Event) ([]byte, error)
-	ListByTunnel(ctx context.Context, tunnelID string, limit int) ([]*model.Event, error)
+	Insert(ctx context.Context, ev *models.Event) (bool, error)
+	GetByID(ctx context.Context, id string) (*models.Event, error)
+	GetByIDForProject(ctx context.Context, projectID, eventID string) (*models.Event, error)
+	GetPayload(ctx context.Context, ev *models.Event) ([]byte, error)
+	ListByTunnel(ctx context.Context, tunnelID string, limit int) ([]*models.Event, error)
 }
 
 type Config struct {
@@ -45,7 +45,7 @@ func New(pool *pgxpool.Pool, objects ObjectStore, cfg Config) Repository {
 	return &repository{pool: pool, objects: objects, cfg: cfg}
 }
 
-func (r *repository) Insert(ctx context.Context, ev *model.Event) (bool, error) {
+func (r *repository) Insert(ctx context.Context, ev *models.Event) (bool, error) {
 	payloadSize := int32(len(ev.Payload))
 
 	var payload []byte
@@ -110,7 +110,7 @@ func (r *repository) Insert(ctx context.Context, ev *model.Event) (bool, error) 
 	return true, nil
 }
 
-func (r *repository) GetPayload(ctx context.Context, ev *model.Event) ([]byte, error) {
+func (r *repository) GetPayload(ctx context.Context, ev *models.Event) ([]byte, error) {
 	if len(ev.Payload) > 0 {
 		return ev.Payload, nil
 	}
@@ -120,12 +120,12 @@ func (r *repository) GetPayload(ctx context.Context, ev *model.Event) ([]byte, e
 	return r.objects.Get(ctx, ev.PayloadRef)
 }
 
-func (r *repository) GetByID(ctx context.Context, id string) (*model.Event, error) {
+func (r *repository) GetByID(ctx context.Context, id string) (*models.Event, error) {
 	row := r.pool.QueryRow(ctx, eventSelectSQL+` WHERE e.id = $1`, id)
 	return scanEvent(row)
 }
 
-func (r *repository) GetByIDForProject(ctx context.Context, projectID, eventID string) (*model.Event, error) {
+func (r *repository) GetByIDForProject(ctx context.Context, projectID, eventID string) (*models.Event, error) {
 	row := r.pool.QueryRow(ctx, eventSelectSQL+`
 		JOIN tunnels t ON t.id = e.tunnel_id
 		WHERE e.id = $1 AND t.project_id = $2
@@ -133,7 +133,7 @@ func (r *repository) GetByIDForProject(ctx context.Context, projectID, eventID s
 	return scanEvent(row)
 }
 
-func (r *repository) ListByTunnel(ctx context.Context, tunnelID string, limit int) ([]*model.Event, error) {
+func (r *repository) ListByTunnel(ctx context.Context, tunnelID string, limit int) ([]*models.Event, error) {
 	rows, err := r.pool.Query(ctx, eventSelectSQL+`
 		WHERE e.tunnel_id = $1
 		ORDER BY e.created_at DESC
@@ -144,7 +144,7 @@ func (r *repository) ListByTunnel(ctx context.Context, tunnelID string, limit in
 	}
 	defer rows.Close()
 
-	var out []*model.Event
+	var out []*models.Event
 	for rows.Next() {
 		ev, err := scanEvent(rows)
 		if err != nil {
@@ -165,8 +165,8 @@ type rowScanner interface {
 	Scan(dest ...any) error
 }
 
-func scanEvent(row rowScanner) (*model.Event, error) {
-	var ev model.Event
+func scanEvent(row rowScanner) (*models.Event, error) {
+	var ev models.Event
 	var headersJSON []byte
 	var payload []byte
 	var payloadRef *string

@@ -31,8 +31,9 @@ make compose-up && make migrate-up && make run-server
 ## Типичные ловушки qrok
 
 - Сервер: `cmd/main.go` + `internal/server` (не `cmd/server`).
-- Control plane persistence: `internal/controlplane/infrastructure/{auth,eventstore,delivery}`.
-- HTTP API: пакет `httpapi`, путь `internal/controlplane/http`.
+- Control plane persistence: `internal/controlplane/infrastructure/{auth,eventstore,delivery,models}`.
+- HTTP API: пакет `httpapi`, путь `internal/transport/http`.
+- gRPC gateway: пакет `gateway`, путь `internal/transport/grpc`.
 - Middleware: только `internal/middleware`.
 - Postgres DSN в Makefile: `127.0.0.1`, не `localhost` (IPv6 на Windows/WSL).
 - Партиционированная `events`: глобальная дедупликация через `event_dedup`, не `UNIQUE INDEX ON events(id)`.

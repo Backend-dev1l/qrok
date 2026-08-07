@@ -18,7 +18,7 @@ import (
 	"qrok/internal/controlplane/infrastructure/delivery"
 	"qrok/internal/controlplane/infrastructure/eventstore"
 	"qrok/internal/controlplane/service"
-	"qrok/internal/gateway"
+	"qrok/internal/transport/grpc"
 	qrokv1 "qrok/internal/proto/qrok/v1"
 	"qrok/internal/testutil/integ"
 	"qrok/pkg/objectstore"
@@ -46,7 +46,7 @@ func connectStores(t *testing.T, ctx context.Context) (*pgxpool.Pool, *objectsto
 
 	pool, err := postgres.New(ctx, postgres.Config{DSN: integ.PostgresDSN()})
 	if err != nil {
-		t.Skipf("postgres недоступен (%v); make compose-up && make migrate-up", err)
+		t.Skipf("postgres unavailable (%v); run make compose-up && make migrate-up", err)
 	}
 
 	objects, err := objectstore.New(ctx, objectstore.Config{
@@ -58,7 +58,7 @@ func connectStores(t *testing.T, ctx context.Context) (*pgxpool.Pool, *objectsto
 	})
 	if err != nil {
 		pool.Close()
-		t.Skipf("minio недоступен (%v); make compose-up", err)
+		t.Skipf("minio unavailable (%v); run make compose-up", err)
 	}
 
 	return pool, objects
@@ -70,7 +70,7 @@ func requireKafkaBroker(t *testing.T) string {
 	addr := integ.KafkaBroker()
 	conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
 	if err != nil {
-		t.Skipf("kafka недоступен (%v); make compose-up", err)
+		t.Skipf("kafka unavailable (%v); run make compose-up", err)
 	}
 	_ = conn.Close()
 	return addr

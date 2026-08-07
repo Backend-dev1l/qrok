@@ -15,7 +15,7 @@ func deviceCodeHandler(deps Deps) http.HandlerFunc {
 		}
 		if r.Body != nil && r.ContentLength != 0 {
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				fault.WriteHTTPError(r.Context(), w, fault.ErrBadRequest.Wrap(err, "невалидный JSON").WithOp("httpapi.device_code"))
+				fault.WriteHTTPError(r.Context(), w, fault.ErrBadRequest.Wrap(err, "invalid JSON").WithOp("httpapi.device_code"))
 				return
 			}
 		}
@@ -38,7 +38,7 @@ func deviceTokenHandler(deps Deps) http.HandlerFunc {
 			DeviceCode string `json:"device_code"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			fault.WriteHTTPError(r.Context(), w, fault.ErrBadRequest.Wrap(err, "невалидный JSON").WithOp("httpapi.device_token"))
+			fault.WriteHTTPError(r.Context(), w, fault.ErrBadRequest.Wrap(err, "invalid JSON").WithOp("httpapi.device_token"))
 			return
 		}
 
@@ -65,7 +65,7 @@ func deviceApproveHandler(deps Deps) http.HandlerFunc {
 			ProjectID string `json:"project_id"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			fault.WriteHTTPError(r.Context(), w, fault.ErrBadRequest.Wrap(err, "невалидный JSON").WithOp("httpapi.device_approve"))
+			fault.WriteHTTPError(r.Context(), w, fault.ErrBadRequest.Wrap(err, "invalid JSON").WithOp("httpapi.device_approve"))
 			return
 		}
 
