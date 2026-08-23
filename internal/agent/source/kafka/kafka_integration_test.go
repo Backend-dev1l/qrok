@@ -146,6 +146,10 @@ func TestSubscribeAckCommit(t *testing.T) {
 	assert.Equal(t, "00-abc", ev.Headers["traceparent"])
 	require.NoError(t, s1.Ack(context.Background(), ev))
 	stopSubscribe(t, cancel1, done1)
+	// Отмена контекста завершает только FetchMessage: reader остаётся членом
+	// consumer group до Close(). Без явного Close партиция при ребалансе может
+	// достаться «зомби»-reader'у первой сессии, и вторая сессия не получит ничего.
+	require.NoError(t, s1.Close())
 
 	// Вторая сессия той же группы: закоммиченное сообщение не должно прийти,
 	// новое — должно.
