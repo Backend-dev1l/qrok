@@ -23,7 +23,7 @@ func Run(ctx context.Context, cfg *config.Listen, log *slog.Logger) error {
 		log = slog.Default()
 	}
 
-	token, err := credentials.ResolveToken(cfg.Listen.Token)
+	token, err := credentials.ResolveListenToken(cfg.Listen.Token, !cfg.Listen.TLS)
 	if err != nil {
 		return err
 	}

@@ -156,3 +156,36 @@ func startTestStack(t *testing.T, ctx context.Context, pool *pgxpool.Pool, objec
 		cancel:     cancel,
 	}
 }
+
+// waitListenReady publishes a probe event and waits until the listen client
+// delivers it to the stub — ensures ListenStream is subscribed before live traffic.
+func waitListenReady(
+	t *testing.T,
+	ctx context.Context,
+	stack *testStack,
+	tunnelID, topic string,
+	probeReceived func(probeBody string) bool,
+) {
+	t.Helper()
+
+	probe := "probe"
+	require.Eventually(t, func() bool {
+		require.NoError(t, stack.Bus.Publish(ctx, &qrokv1.EventEnvelope{
+			EventId:  fmt.Sprintf("probe-%d", time.Now().UnixNano()),
+			TunnelId: tunnelID,
+			Topic:    topic,
+			Payload:  []byte(probe),
+		}))
+		return probeReceived(probe)
+	}, 30*time.Second, 200*time.Millisecond, "listen client did not become ready")
+}
+
+func assertListenRunning(t *testing.T, listenDone <-chan error) {
+	t.Helper()
+
+	select {
+	case err := <-listenDone:
+		t.Fatalf("listen exited before test finished: %v", err)
+	default:
+	}
+}

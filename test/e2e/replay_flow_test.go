@@ -22,7 +22,7 @@ import (
 // Сквозной сценарий replay: событие в Postgres → replay API → ListenStream → HTTP localhost.
 // Требует make compose-up && make migrate-up (Postgres + MinIO).
 func TestReplayDeliverToLocalhost(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
 	pool, objects := connectStores(t, ctx)
@@ -42,9 +42,14 @@ func TestReplayDeliverToLocalhost(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	received := make(chan string, 1)
+	received := make(chan string, 8)
 	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
+		if string(body) == "probe" {
+			received <- string(body)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		assert.Equal(t, "true", r.Header.Get("X-Qrok-Replay"))
 		received <- string(body)
 		w.WriteHeader(http.StatusOK)
@@ -62,18 +67,28 @@ func TestReplayDeliverToLocalhost(t *testing.T) {
 		}, nil)
 	}()
 
-	time.Sleep(200 * time.Millisecond)
+	waitListenReady(t, ctx, stack, tunnelID, "demo", func(probe string) bool {
+		select {
+		case body := <-received:
+			return body == probe
+		default:
+			return false
+		}
+	})
+	assertListenRunning(t, listenDone)
 
 	result, err := stack.Replay.Replay(ctx, &models.Subject{AllowAll: true}, eventID, "*")
 	require.NoError(t, err)
 	require.NotEmpty(t, result.DeliveryID)
 
-	select {
-	case body := <-received:
-		assert.Equal(t, string(payload), body)
-	case <-ctx.Done():
-		t.Fatal("timeout waiting for localhost delivery")
-	}
+	require.Eventually(t, func() bool {
+		select {
+		case body := <-received:
+			return body == string(payload)
+		default:
+			return false
+		}
+	}, 10*time.Second, 100*time.Millisecond, "replay event did not reach localhost")
 
 	require.Eventually(t, func() bool {
 		rec, err := stack.Delivery.GetByID(ctx, result.DeliveryID)

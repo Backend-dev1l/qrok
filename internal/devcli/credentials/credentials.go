@@ -71,8 +71,20 @@ func Save(f *File) error {
 	return nil
 }
 
-// ResolveToken: явный token из конфига → credentials → пусто.
+// ResolveToken returns a dev token: config value → credentials file.
+// For qrok replay and other REST calls a token is always required.
 func ResolveToken(configToken string) (string, error) {
+	return resolveToken(configToken, false)
+}
+
+// ResolveListenToken returns a token for ListenStream.
+// When plaintext is true (gateway TLS disabled), an empty token is allowed so
+// dev/e2e can connect to a gateway with allow_insecure_listen.
+func ResolveListenToken(configToken string, plaintext bool) (string, error) {
+	return resolveToken(configToken, plaintext)
+}
+
+func resolveToken(configToken string, allowEmpty bool) (string, error) {
 	if configToken != "" {
 		return configToken, nil
 	}
@@ -80,11 +92,14 @@ func ResolveToken(configToken string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if creds == nil || creds.AccessToken == "" {
-		return "", fault.ErrUnauthorized.
-			New("dev token not found").
-			WithOp("credentials.resolve").
-			WithHint("run qrok login or set listen.token in config")
+	if creds != nil && creds.AccessToken != "" {
+		return creds.AccessToken, nil
 	}
-	return creds.AccessToken, nil
+	if allowEmpty {
+		return "", nil
+	}
+	return "", fault.ErrUnauthorized.
+		New("dev token not found").
+		WithOp("credentials.resolve").
+		WithHint("run qrok login or set listen.token in config")
 }
