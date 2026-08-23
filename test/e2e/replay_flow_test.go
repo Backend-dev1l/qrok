@@ -4,6 +4,7 @@ package e2e_test
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -27,10 +28,8 @@ func TestReplayDeliverToLocalhost(t *testing.T) {
 	pool, objects := connectStores(t, ctx)
 	defer pool.Close()
 
-	const (
-		tunnelID = "e2e-tunnel"
-		eventID  = "01E2EEVENT0000000000000000"
-	)
+	tunnelID := fmt.Sprintf("e2e-replay-%d", time.Now().UnixNano())
+	eventID := fmt.Sprintf("e2e-event-%d", time.Now().UnixNano())
 
 	stack := startTestStack(t, ctx, pool, objects)
 

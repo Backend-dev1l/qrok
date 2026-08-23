@@ -18,9 +18,9 @@ import (
 	"qrok/internal/controlplane/infrastructure/delivery"
 	"qrok/internal/controlplane/infrastructure/eventstore"
 	"qrok/internal/controlplane/service"
-	"qrok/internal/transport/grpc"
 	qrokv1 "qrok/internal/proto/qrok/v1"
 	"qrok/internal/testutil/integ"
+	"qrok/internal/transport/grpc"
 	"qrok/pkg/objectstore"
 	"qrok/pkg/postgres"
 )
@@ -32,9 +32,9 @@ const (
 
 type testStack struct {
 	Pool       *pgxpool.Pool
-	EventRepo  eventstore.Repository
-	Replay     service.ReplayService
-	Delivery   delivery.Repository
+	EventRepo  *eventstore.Repository
+	Replay     *service.Replay
+	Delivery   *delivery.Repository
 	Bus        *inproc.Bus
 	GRPCAddr   string
 	grpcServer *grpc.Server
@@ -98,8 +98,8 @@ func seedTunnel(t *testing.T, ctx context.Context, pool *pgxpool.Pool, topics []
 
 	_, err = pool.Exec(ctx, `
 		INSERT INTO tunnels (id, project_id, name, source_type, topics)
-		VALUES ($1, $2, 'e2e', 'kafka', $3)
-	`, tunnelID, e2eProjectID, topics)
+		VALUES ($1, $2, $3, 'kafka', $4)
+	`, tunnelID, e2eProjectID, tunnelID, topics)
 	require.NoError(t, err)
 
 	_, err = pool.Exec(ctx, `
@@ -122,7 +122,7 @@ func startTestStack(t *testing.T, ctx context.Context, pool *pgxpool.Pool, objec
 	deliveryRepo := delivery.NewRepository(pool)
 	authSvc := service.NewAuthService(authRepo)
 	eventSvc := service.NewEventService(eventRepo, deliveryRepo, authRepo)
-	deliverySvc := service.NewDeliveryService(deliveryRepo)
+	deliverySvc := service.NewDeliveryService(deliveryRepo, authRepo)
 	replaySvc := service.NewReplayService(eventRepo, deliveryRepo, authRepo, eventBus)
 
 	_, cancel := context.WithCancel(ctx)

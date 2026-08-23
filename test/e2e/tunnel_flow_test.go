@@ -18,6 +18,7 @@ import (
 
 	"qrok/internal/agent"
 	"qrok/internal/config"
+	"qrok/internal/controlplane/infrastructure/models"
 	"qrok/internal/devcli"
 )
 
@@ -38,10 +39,18 @@ func TestKafkaAgentGatewayListenLocalhost(t *testing.T) {
 	stack := startTestStack(t, ctx, pool, objects)
 
 	payload := `{"happy_path":true}`
-	received := make(chan string, 1)
+	type localDelivery struct {
+		body    string
+		eventID string
+	}
+	received := make(chan localDelivery, 3)
 	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		received <- string(body)
+		received <- localDelivery{body: string(body), eventID: r.Header.Get("X-Qrok-Event-Id")}
+		if string(body) == `{"fail":true}` {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer stub.Close()
@@ -77,16 +86,35 @@ func TestKafkaAgentGatewayListenLocalhost(t *testing.T) {
 	}()
 
 	time.Sleep(500 * time.Millisecond)
-	produceKafka(t, broker, topic, kafka.Message{Value: []byte(payload)})
+	produceKafka(t, broker, topic, kafka.Message{Value: []byte(`{"warmup":true}`)})
+	select {
+	case <-received:
+	case <-time.After(60 * time.Second):
+		t.Fatal("warmup event did not reach localhost")
+	}
 
+	produceKafka(t, broker, topic, kafka.Message{Value: []byte(payload)})
+	deliveredAt := time.Now()
+	select {
+	case delivery := <-received:
+		require.Equal(t, payload, delivery.body)
+		require.Less(t, time.Since(deliveredAt), time.Second, "Kafka to localhost latency exceeded MVP target")
+	case <-time.After(time.Second):
+		t.Fatal("event did not reach localhost within MVP latency target")
+	}
+
+	produceKafka(t, broker, topic, kafka.Message{Value: []byte(`{"fail":true}`)})
+	var failed localDelivery
+	select {
+	case failed = <-received:
+	case <-time.After(10 * time.Second):
+		t.Fatal("failed localhost delivery was not attempted")
+	}
 	require.Eventually(t, func() bool {
-		select {
-		case body := <-received:
-			return body == payload
-		default:
-			return false
-		}
-	}, 60*time.Second, 200*time.Millisecond, "event did not reach localhost")
+		rec, err := stack.Delivery.GetByID(ctx, failed.eventID+"-live")
+		return err == nil && rec.Status == models.DeliveryStatusFailed && rec.StatusCode != nil &&
+			*rec.StatusCode == http.StatusInternalServerError
+	}, 5*time.Second, 100*time.Millisecond, "localhost failure was not recorded")
 
 	require.Eventually(t, func() bool {
 		events, err := stack.EventRepo.ListByTunnel(ctx, tunnelID, 10)

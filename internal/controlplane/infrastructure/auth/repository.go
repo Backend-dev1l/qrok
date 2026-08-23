@@ -11,41 +11,20 @@ import (
 )
 
 // Repository provides auth-related persistence operations.
-type Repository interface {
-	FindAgentToken(ctx context.Context, tokenHash, tunnelID string) (tokenID, projectID string, err error)
-	FindAPIToken(ctx context.Context, tokenHash string) (tokenID, projectID string, err error)
-	FindDevToken(ctx context.Context, tokenHash, tunnelID string) (tokenID, projectID, userID string, err error)
-	TunnelOwnedByProject(ctx context.Context, projectID, tunnelID string) (bool, error)
-	EventOwnedByProject(ctx context.Context, projectID, eventID string) (bool, error)
-	ProjectExists(ctx context.Context, projectID string) (bool, error)
-
-	InsertDeviceAuthorization(ctx context.Context, deviceHash, userCode, projectID string, pollInterval int, expiresAt time.Time) error
-	GetDeviceByHash(ctx context.Context, deviceHash string) (status models.DeviceStatus, expiresAt time.Time, accessToken *string, err error)
-	UpdateDeviceStatus(ctx context.Context, deviceHash string, status models.DeviceStatus) error
-	ConsumeDeviceToken(ctx context.Context, deviceHash string) error
-	WithinTx(ctx context.Context, fn func(TxRepository) error) error
-
-	InsertDevToken(ctx context.Context, id, projectID, tokenHash, name string) error
-}
-
-// TxRepository exposes auth persistence operations inside a transaction.
-type TxRepository interface {
-	GetDeviceByUserCodeForUpdate(ctx context.Context, userCode string) (deviceHash string, status models.DeviceStatus, expiresAt time.Time, err error)
-	UpdateDeviceStatus(ctx context.Context, deviceHash string, status models.DeviceStatus) error
-	ApproveDevice(ctx context.Context, deviceHash, projectID, devTokenID, accessToken string) error
-	InsertDevToken(ctx context.Context, id, projectID, tokenHash, name string) error
-	ProjectExists(ctx context.Context, projectID string) (bool, error)
-}
-
-type repository struct {
+type Repository struct {
 	pool *pgxpool.Pool
 }
 
-func NewRepository(pool *pgxpool.Pool) Repository {
-	return &repository{pool: pool}
+func NewRepository(pool *pgxpool.Pool) *Repository {
+	return &Repository{pool: pool}
 }
 
-func (r *repository) FindAgentToken(ctx context.Context, tokenHash, tunnelID string) (string, string, error) {
+// Tx exposes auth persistence operations inside a transaction.
+type Tx struct {
+	tx pgx.Tx
+}
+
+func (r *Repository) FindAgentToken(ctx context.Context, tokenHash, tunnelID string) (string, string, error) {
 	var tokenID, projectID string
 	err := r.pool.QueryRow(ctx, `
 		SELECT at.id, at.project_id
@@ -58,18 +37,24 @@ func (r *repository) FindAgentToken(ctx context.Context, tokenHash, tunnelID str
 	return tokenID, projectID, err
 }
 
-func (r *repository) FindAPIToken(ctx context.Context, tokenHash string) (string, string, error) {
+func (r *Repository) FindAPIToken(ctx context.Context, tokenHash string) (string, string, error) {
 	var tokenID, projectID string
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, project_id
-		FROM agent_tokens
-		WHERE token_hash = $1
-		  AND revoked_at IS NULL
+		SELECT id, project_id FROM (
+			SELECT id, project_id
+			FROM agent_tokens
+			WHERE token_hash = $1 AND revoked_at IS NULL
+			UNION ALL
+			SELECT id, project_id
+			FROM dev_tokens
+			WHERE token_hash = $1 AND revoked_at IS NULL
+		) tokens
+		LIMIT 1
 	`, tokenHash).Scan(&tokenID, &projectID)
 	return tokenID, projectID, err
 }
 
-func (r *repository) FindDevToken(ctx context.Context, tokenHash, tunnelID string) (string, string, string, error) {
+func (r *Repository) FindDevToken(ctx context.Context, tokenHash, tunnelID string) (string, string, string, error) {
 	var tokenID, projectID, userID string
 	err := r.pool.QueryRow(ctx, `
 		SELECT dt.id, dt.project_id, COALESCE(dt.user_id, '')
@@ -82,7 +67,7 @@ func (r *repository) FindDevToken(ctx context.Context, tokenHash, tunnelID strin
 	return tokenID, projectID, userID, err
 }
 
-func (r *repository) TunnelOwnedByProject(ctx context.Context, projectID, tunnelID string) (bool, error) {
+func (r *Repository) TunnelOwnedByProject(ctx context.Context, projectID, tunnelID string) (bool, error) {
 	var exists bool
 	err := r.pool.QueryRow(ctx, `
 		SELECT EXISTS(
@@ -92,7 +77,7 @@ func (r *repository) TunnelOwnedByProject(ctx context.Context, projectID, tunnel
 	return exists, err
 }
 
-func (r *repository) EventOwnedByProject(ctx context.Context, projectID, eventID string) (bool, error) {
+func (r *Repository) EventOwnedByProject(ctx context.Context, projectID, eventID string) (bool, error) {
 	var exists bool
 	err := r.pool.QueryRow(ctx, `
 		SELECT EXISTS(
@@ -105,13 +90,13 @@ func (r *repository) EventOwnedByProject(ctx context.Context, projectID, eventID
 	return exists, err
 }
 
-func (r *repository) ProjectExists(ctx context.Context, projectID string) (bool, error) {
+func (r *Repository) ProjectExists(ctx context.Context, projectID string) (bool, error) {
 	var exists bool
 	err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM projects WHERE id = $1)`, projectID).Scan(&exists)
 	return exists, err
 }
 
-func (r *repository) InsertDeviceAuthorization(ctx context.Context, deviceHash, userCode, projectID string, pollInterval int, expiresAt time.Time) error {
+func (r *Repository) InsertDeviceAuthorization(ctx context.Context, deviceHash, userCode, projectID string, pollInterval int, expiresAt time.Time) error {
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO device_authorizations (
 			device_code_hash, user_code, status, project_id, poll_interval_sec, expires_at
@@ -120,7 +105,7 @@ func (r *repository) InsertDeviceAuthorization(ctx context.Context, deviceHash, 
 	return err
 }
 
-func (r *repository) GetDeviceByHash(ctx context.Context, deviceHash string) (models.DeviceStatus, time.Time, *string, error) {
+func (r *Repository) GetDeviceByHash(ctx context.Context, deviceHash string) (models.DeviceStatus, time.Time, *string, error) {
 	var status string
 	var expiresAt time.Time
 	var accessToken *string
@@ -132,14 +117,14 @@ func (r *repository) GetDeviceByHash(ctx context.Context, deviceHash string) (mo
 	return models.DeviceStatus(status), expiresAt, accessToken, err
 }
 
-func (r *repository) UpdateDeviceStatus(ctx context.Context, deviceHash string, status models.DeviceStatus) error {
+func (r *Repository) UpdateDeviceStatus(ctx context.Context, deviceHash string, status models.DeviceStatus) error {
 	_, err := r.pool.Exec(ctx, `
 		UPDATE device_authorizations SET status = $1 WHERE device_code_hash = $2
 	`, string(status), deviceHash)
 	return err
 }
 
-func (r *repository) ConsumeDeviceToken(ctx context.Context, deviceHash string) error {
+func (r *Repository) ConsumeDeviceToken(ctx context.Context, deviceHash string) error {
 	_, err := r.pool.Exec(ctx, `
 		UPDATE device_authorizations
 		SET status = $1, access_token_plaintext = NULL
@@ -148,7 +133,7 @@ func (r *repository) ConsumeDeviceToken(ctx context.Context, deviceHash string) 
 	return err
 }
 
-func (r *repository) InsertDevToken(ctx context.Context, id, projectID, tokenHash, name string) error {
+func (r *Repository) InsertDevToken(ctx context.Context, id, projectID, tokenHash, name string) error {
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO dev_tokens (id, project_id, token_hash, name)
 		VALUES ($1, $2, $3, $4)
@@ -156,28 +141,24 @@ func (r *repository) InsertDevToken(ctx context.Context, id, projectID, tokenHas
 	return err
 }
 
-func (r *repository) WithinTx(ctx context.Context, fn func(TxRepository) error) error {
+func (r *Repository) WithinTx(ctx context.Context, fn func(*Tx) error) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
-	if err := fn(&txRepository{tx: tx}); err != nil {
+	if err := fn(&Tx{tx: tx}); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
 }
 
-type txRepository struct {
-	tx pgx.Tx
-}
-
-func (r *txRepository) GetDeviceByUserCodeForUpdate(ctx context.Context, userCode string) (string, models.DeviceStatus, time.Time, error) {
+func (tx *Tx) GetDeviceByUserCodeForUpdate(ctx context.Context, userCode string) (string, models.DeviceStatus, time.Time, error) {
 	var deviceHash string
 	var status string
 	var expiresAt time.Time
-	err := r.tx.QueryRow(ctx, `
+	err := tx.tx.QueryRow(ctx, `
 		SELECT device_code_hash, status, expires_at
 		FROM device_authorizations
 		WHERE user_code = $1
@@ -186,15 +167,15 @@ func (r *txRepository) GetDeviceByUserCodeForUpdate(ctx context.Context, userCod
 	return deviceHash, models.DeviceStatus(status), expiresAt, err
 }
 
-func (r *txRepository) UpdateDeviceStatus(ctx context.Context, deviceHash string, status models.DeviceStatus) error {
-	_, err := r.tx.Exec(ctx, `
+func (tx *Tx) UpdateDeviceStatus(ctx context.Context, deviceHash string, status models.DeviceStatus) error {
+	_, err := tx.tx.Exec(ctx, `
 		UPDATE device_authorizations SET status = $1 WHERE device_code_hash = $2
 	`, string(status), deviceHash)
 	return err
 }
 
-func (r *txRepository) ApproveDevice(ctx context.Context, deviceHash, projectID, devTokenID, accessToken string) error {
-	_, err := r.tx.Exec(ctx, `
+func (tx *Tx) ApproveDevice(ctx context.Context, deviceHash, projectID, devTokenID, accessToken string) error {
+	_, err := tx.tx.Exec(ctx, `
 		UPDATE device_authorizations
 		SET status = $1, project_id = $2, dev_token_id = $3, access_token_plaintext = $4
 		WHERE device_code_hash = $5
@@ -202,16 +183,16 @@ func (r *txRepository) ApproveDevice(ctx context.Context, deviceHash, projectID,
 	return err
 }
 
-func (r *txRepository) InsertDevToken(ctx context.Context, id, projectID, tokenHash, name string) error {
-	_, err := r.tx.Exec(ctx, `
+func (tx *Tx) InsertDevToken(ctx context.Context, id, projectID, tokenHash, name string) error {
+	_, err := tx.tx.Exec(ctx, `
 		INSERT INTO dev_tokens (id, project_id, token_hash, name)
 		VALUES ($1, $2, $3, $4)
 	`, id, projectID, tokenHash, name)
 	return err
 }
 
-func (r *txRepository) ProjectExists(ctx context.Context, projectID string) (bool, error) {
+func (tx *Tx) ProjectExists(ctx context.Context, projectID string) (bool, error) {
 	var exists bool
-	err := r.tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM projects WHERE id = $1)`, projectID).Scan(&exists)
+	err := tx.tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM projects WHERE id = $1)`, projectID).Scan(&exists)
 	return exists, err
 }

@@ -13,26 +13,51 @@ import (
 	"qrok/pkg/fault"
 )
 
-// DeviceService implements the OAuth device authorization flow.
-type DeviceService interface {
-	Start(ctx context.Context, projectID, verificationURI string) (*models.DeviceStart, error)
-	Approve(ctx context.Context, userCode, projectID string) error
-	Poll(ctx context.Context, deviceCode string) (*models.DeviceTokenPoll, error)
+type deviceAuthQuerier interface {
+	InsertDeviceAuthorization(ctx context.Context, deviceHash, userCode, projectID string, pollInterval int, expiresAt time.Time) error
+	GetDeviceByHash(ctx context.Context, deviceHash string) (status models.DeviceStatus, expiresAt time.Time, accessToken *string, err error)
+	UpdateDeviceStatus(ctx context.Context, deviceHash string, status models.DeviceStatus) error
+	ConsumeDeviceToken(ctx context.Context, deviceHash string) error
+	WithinTx(ctx context.Context, fn func(deviceAuthTxQuerier) error) error
 }
 
-type deviceService struct {
-	repo auth.Repository
+type deviceAuthTxQuerier interface {
+	GetDeviceByUserCodeForUpdate(ctx context.Context, userCode string) (deviceHash string, status models.DeviceStatus, expiresAt time.Time, err error)
+	UpdateDeviceStatus(ctx context.Context, deviceHash string, status models.DeviceStatus) error
+	ApproveDevice(ctx context.Context, deviceHash, projectID, devTokenID, accessToken string) error
+	InsertDevToken(ctx context.Context, id, projectID, tokenHash, name string) error
+	ProjectExists(ctx context.Context, projectID string) (bool, error)
+}
+
+type deviceAuthRepo struct {
+	*auth.Repository
+}
+
+// DeviceAuthRepository adapts the Postgres auth repository for the device flow.
+func DeviceAuthRepository(repo *auth.Repository) deviceAuthQuerier {
+	return deviceAuthRepo{Repository: repo}
+}
+
+func (d deviceAuthRepo) WithinTx(ctx context.Context, fn func(deviceAuthTxQuerier) error) error {
+	return d.Repository.WithinTx(ctx, func(tx *auth.Tx) error {
+		return fn(tx)
+	})
+}
+
+// Device implements the OAuth device authorization flow.
+type Device struct {
+	repo deviceAuthQuerier
 	now  func() time.Time
 }
 
-func NewDeviceService(repo auth.Repository) DeviceService {
-	return &deviceService{
+func NewDeviceService(repo deviceAuthQuerier) *Device {
+	return &Device{
 		repo: repo,
 		now:  time.Now,
 	}
 }
 
-func (s *deviceService) Start(ctx context.Context, projectID, verificationURI string) (*models.DeviceStart, error) {
+func (s *Device) Start(ctx context.Context, projectID, verificationURI string) (*models.DeviceStart, error) {
 	const op = "device.start"
 
 	deviceCode, err := auth.RandomURLSafe(32)
@@ -60,18 +85,25 @@ func (s *deviceService) Start(ctx context.Context, projectID, verificationURI st
 	}, nil
 }
 
-func (s *deviceService) Approve(ctx context.Context, userCode, projectID string) error {
+func (s *Device) Approve(ctx context.Context, subject *models.Subject, userCode, requestedProjectID string) error {
 	const op = "device.approve"
 
-	userCode = auth.NormalizeUserCode(userCode)
-	if userCode == "" {
-		return validationErr(op, "user_code is required")
+	if err := ensureSubject(subject); err != nil {
+		return err
+	}
+	projectID := subject.ProjectID
+	if subject.AllowAll {
+		projectID = requestedProjectID
+	} else if requestedProjectID != "" && requestedProjectID != projectID {
+		return forbiddenErr(op, "cannot approve a device for another project")
 	}
 	if projectID == "" {
-		return validationErr(op, "project_id is required")
+		return fault.ErrValidation.New("project_id is required").WithOp(op)
 	}
 
-	return s.repo.WithinTx(ctx, func(tx auth.TxRepository) error {
+	userCode = auth.NormalizeUserCode(userCode)
+
+	return s.repo.WithinTx(ctx, func(tx deviceAuthTxQuerier) error {
 		deviceHash, status, expiresAt, err := tx.GetDeviceByUserCodeForUpdate(ctx, userCode)
 		if err != nil {
 			return notFoundErr(op, "unknown user_code", err)
@@ -108,11 +140,8 @@ func (s *deviceService) Approve(ctx context.Context, userCode, projectID string)
 	})
 }
 
-func (s *deviceService) Poll(ctx context.Context, deviceCode string) (*models.DeviceTokenPoll, error) {
+func (s *Device) Poll(ctx context.Context, deviceCode string) (*models.DeviceTokenPoll, error) {
 	const op = "device.poll"
-	if deviceCode == "" {
-		return nil, validationErr(op, "device_code is required")
-	}
 
 	deviceHash := auth.HashDeviceCode(deviceCode)
 	status, expiresAt, accessToken, err := s.repo.GetDeviceByHash(ctx, deviceHash)

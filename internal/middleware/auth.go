@@ -1,16 +1,22 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
-	"qrok/internal/controlplane/service"
+	"qrok/internal/controlplane/infrastructure/models"
 	"qrok/pkg/fault"
 )
 
+type authService interface {
+	AuthenticateAPI(ctx context.Context, plaintext string) (*models.Subject, error)
+	InsecureSubject() *models.Subject
+}
+
 // AuthConfig configures API authentication middleware.
 type AuthConfig struct {
-	Auth          service.AuthService
+	Auth          authService
 	AllowInsecure bool
 }
 

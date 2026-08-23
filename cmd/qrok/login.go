@@ -26,7 +26,7 @@ func newLoginCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "login",
-		Short: "Авторизация dev-клиента (OAuth device flow через дашборд)",
+		Short: "Authenticate dev client (OAuth device flow via dashboard)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			apiURL = strings.TrimRight(apiURL, "/")
 			if apiURL == "" {
@@ -55,12 +55,12 @@ func newLoginCmd() *cobra.Command {
 			if err != nil {
 				return fault.ErrServiceUnavail.Wrap(err, "failed to call API").WithOp("cli.login")
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 
 			startPayload, _ := io.ReadAll(resp.Body)
 			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 				return fault.ErrServiceUnavail.
-					Newf("API вернул HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(startPayload))).
+					Newf("API returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(startPayload))).
 					WithOp("cli.login")
 			}
 
@@ -80,14 +80,17 @@ func newLoginCmd() *cobra.Command {
 				interval = 5 * time.Second
 			}
 
-			fmt.Fprintf(os.Stdout, "Open in browser: %s\n", start.VerificationURI)
-			fmt.Fprintf(os.Stdout, "Verification code: %s\n", start.UserCode)
+			instructions := fmt.Sprintf("Open in browser: %s\nVerification code: %s\n",
+				start.VerificationURI, start.UserCode)
 			if projectID != "" {
-				fmt.Fprintf(os.Stdout, "Project ID: %s\n", projectID)
+				instructions += fmt.Sprintf("Project ID: %s\n", projectID)
 			} else {
-				fmt.Fprintln(os.Stdout, "On the page enter project_id (from make seed-dev).")
+				instructions += "On the page enter project_id (from make seed-dev).\n"
 			}
-			fmt.Fprintln(os.Stdout, "Waiting for approval…")
+			instructions += "Waiting for approval…\n"
+			if _, err := fmt.Fprint(os.Stdout, instructions); err != nil {
+				return fault.ErrInternal.Wrap(err, "failed to write login instructions").WithOp("cli.login")
+			}
 
 			tokenBody, _ := json.Marshal(map[string]string{"device_code": start.DeviceCode})
 			pollURL := apiURL + "/api/v1/oauth/device/token"
@@ -132,8 +135,11 @@ func newLoginCmd() *cobra.Command {
 						return err
 					}
 					path, _ := credentials.DefaultPath()
-					fmt.Fprintf(os.Stdout, "Login complete. Token saved to %s\n", path)
-					fmt.Fprintln(os.Stdout, "Run: qrok listen --config deploy/listen.example.yaml")
+					if _, err := fmt.Fprintf(os.Stdout,
+						"Login complete. Token saved to %s\nRun: qrok listen --config deploy/listen.example.yaml\n",
+						path); err != nil {
+						return fault.ErrInternal.Wrap(err, "failed to write login result").WithOp("cli.login")
+					}
 					return nil
 				}
 
@@ -162,7 +168,7 @@ func newLoginCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&apiURL, "api", "http://127.0.0.1:8080", "URL control plane API")
-	cmd.Flags().StringVar(&gateway, "gateway", "", "gRPC gateway (сохраняется в credentials, опционально)")
-	cmd.Flags().StringVar(&projectID, "project", "", "project_id для привязки dev-токена (из make seed-dev)")
+	cmd.Flags().StringVar(&gateway, "gateway", "", "gRPC gateway (saved to credentials, optional)")
+	cmd.Flags().StringVar(&projectID, "project", "", "project_id to bind dev token (from make seed-dev)")
 	return cmd
 }

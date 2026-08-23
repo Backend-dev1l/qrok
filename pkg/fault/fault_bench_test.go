@@ -11,7 +11,7 @@ import (
 // (otter-кэш, PayloadStore/SQL, сериализация envelope) появятся вместе
 // с самими компонентами; регрессии сравниваются через benchstat.
 
-var benchErr = errors.New("dial tcp 10.0.1.5:9092: connection refused")
+var errBench = errors.New("dial tcp 10.0.1.5:9092: connection refused")
 
 // sink не даёт компилятору выкинуть результат и спрятать аллокации в стек.
 var sink any
@@ -20,7 +20,7 @@ func BenchmarkWrapChain(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		sink = ErrServiceUnavail.
-			Wrap(benchErr, "kafka unavailable").
+			Wrap(errBench, "kafka unavailable").
 			WithOp("agent.kafka.subscribe").
 			WithArg("group_id", "qrok-agent-t1")
 	}
@@ -37,7 +37,7 @@ func BenchmarkFromErrorFault(b *testing.B) {
 func BenchmarkRenderCLI(b *testing.B) {
 	b.Setenv("NO_COLOR", "1")
 	err := ErrServiceUnavail.
-		Wrap(benchErr, "kafka unavailable").
+		Wrap(errBench, "kafka unavailable").
 		WithOp("agent.kafka.subscribe").
 		WithHint("check --brokers")
 	b.ReportAllocs()

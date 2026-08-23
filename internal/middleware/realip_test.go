@@ -25,6 +25,7 @@ func TestRealIP(t *testing.T) {
 		}))
 
 		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		req.RemoteAddr = "127.0.0.1:1234"
 		req.Header.Set("X-Forwarded-For", "203.0.113.10")
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
@@ -43,11 +44,30 @@ func TestRealIP(t *testing.T) {
 		}))
 
 		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		req.RemoteAddr = "127.0.0.1:1234"
 		req.Header.Set("X-Real-IP", "198.51.100.20")
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 		assert.Equal(t, "198.51.100.20", remoteAddr)
+	})
+
+	t.Run("ignores_forwarding_headers_from_public_peer", func(t *testing.T) {
+		t.Parallel()
+
+		var remoteAddr string
+		handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			remoteAddr = r.RemoteAddr
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		req.RemoteAddr = "198.51.100.1:1234"
+		req.Header.Set("X-Forwarded-For", "203.0.113.10")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		assert.Equal(t, "198.51.100.1:1234", remoteAddr)
 	})
 }

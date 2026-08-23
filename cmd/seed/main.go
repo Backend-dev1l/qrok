@@ -50,13 +50,13 @@ func run() error {
 		return err
 	}
 
-	fmt.Println("Dev-данные созданы:")
+	fmt.Println("Development data created:")
 	fmt.Println("  org_id:     ", devOrgID)
 	fmt.Println("  project_id: ", devProjectID)
 	fmt.Println("  tunnel_id:  ", devTunnelID)
 	fmt.Println("  agent_token:", plaintext)
 	fmt.Println()
-	fmt.Println("Dev-клиент (OAuth device flow):")
+	fmt.Println("Dev client (OAuth device flow):")
 	fmt.Println("  qrok login --api http://127.0.0.1:8080 --project", devProjectID)
 	fmt.Println("  qrok listen --config deploy/listen.example.yaml")
 	fmt.Println()
@@ -70,7 +70,7 @@ func seed(ctx context.Context, pool *pgxpool.Pool, tokenHash string) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	_, err = tx.Exec(ctx, `
 		INSERT INTO orgs (id, name) VALUES ($1, 'Dev Org')

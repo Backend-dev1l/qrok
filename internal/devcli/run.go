@@ -11,6 +11,7 @@ import (
 	"qrok/internal/devcli/stream"
 	qrokv1 "qrok/internal/proto/qrok/v1"
 	"qrok/internal/tunnel"
+	"qrok/internal/tunnel/grpcutil"
 	"qrok/pkg/fault"
 )
 
@@ -29,11 +30,15 @@ func Run(ctx context.Context, cfg *config.Listen, log *slog.Logger) error {
 
 	sink := httpsink.New(cfg.Listen.Forward, 15*time.Second)
 
-	client, err := stream.NewListenClient(ctx, cfg.Listen.Gateway)
+	client, err := stream.NewListenClient(ctx, cfg.Listen.Gateway, grpcutil.Config{
+		UseTLS:     cfg.Listen.TLS,
+		ServerName: cfg.Listen.TLSServerName,
+		CAFile:     cfg.Listen.TLSCAFile,
+	})
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	sub := &qrokv1.Subscribe{
 		TunnelId: cfg.Listen.TunnelID,
@@ -85,7 +90,7 @@ func Run(ctx context.Context, cfg *config.Listen, log *slog.Logger) error {
 		if err != nil && !fault.IsRetryable(err) {
 			return err
 		}
-		log.Warn("ListenStream прерван, реконнект", "error", err)
+		log.Warn("ListenStream interrupted, reconnecting", "error", err)
 		select {
 		case <-ctx.Done():
 			return nil

@@ -39,3 +39,20 @@ func TestNewEventIDUnique(t *testing.T) {
 		t.Fatal("expected unique ULIDs")
 	}
 }
+
+func TestSourceEventIDStableForBrokerPosition(t *testing.T) {
+	t.Parallel()
+
+	ev := &source.Event{Topic: "orders", Partition: 2, Offset: 42}
+	first := agent.SourceEventID("tunnel-1", "kafka", ev)
+	second := agent.SourceEventID("tunnel-1", "kafka", ev)
+
+	if first != second {
+		t.Fatalf("source event ID changed: %q != %q", first, second)
+	}
+
+	ev.Offset++
+	if first == agent.SourceEventID("tunnel-1", "kafka", ev) {
+		t.Fatal("different broker positions must have different IDs")
+	}
+}

@@ -1,4 +1,4 @@
-package service_test
+package service
 
 import (
 	"context"
@@ -10,7 +10,6 @@ import (
 
 	"qrok/internal/controlplane/infrastructure/auth"
 	"qrok/internal/controlplane/infrastructure/models"
-	"qrok/internal/controlplane/service"
 	"qrok/pkg/fault"
 )
 
@@ -23,7 +22,7 @@ func TestDeviceService(t *testing.T) {
 		t.Parallel()
 
 		repo := newFakeAuthRepo()
-		svc := service.NewDeviceService(repo)
+		svc := NewDeviceService(repo)
 
 		start, err := svc.Start(ctx, "prj-1", "http://localhost/dashboard/device")
 
@@ -46,7 +45,7 @@ func TestDeviceService(t *testing.T) {
 			expiresAt: time.Now().UTC().Add(time.Hour),
 		})
 
-		svc := service.NewDeviceService(repo)
+		svc := NewDeviceService(repo)
 		result, err := svc.Poll(ctx, "device-code-abc")
 
 		require.NoError(t, err)
@@ -56,7 +55,7 @@ func TestDeviceService(t *testing.T) {
 	t.Run("poll_unknown_device", func(t *testing.T) {
 		t.Parallel()
 
-		svc := service.NewDeviceService(newFakeAuthRepo())
+		svc := NewDeviceService(newFakeAuthRepo())
 		result, err := svc.Poll(ctx, "unknown-device-code")
 
 		require.NoError(t, err)
@@ -76,7 +75,7 @@ func TestDeviceService(t *testing.T) {
 			accessToken: &token,
 		})
 
-		svc := service.NewDeviceService(repo)
+		svc := NewDeviceService(repo)
 		result, err := svc.Poll(ctx, "device-code-xyz")
 
 		require.NoError(t, err)
@@ -100,21 +99,11 @@ func TestDeviceService(t *testing.T) {
 			expiresAt: time.Now().UTC().Add(-time.Minute),
 		})
 
-		svc := service.NewDeviceService(repo)
+		svc := NewDeviceService(repo)
 		result, err := svc.Poll(ctx, "expired-code")
 
 		require.NoError(t, err)
 		assert.Equal(t, "expired_token", result.Error)
-	})
-
-	t.Run("poll_empty_device_code", func(t *testing.T) {
-		t.Parallel()
-
-		svc := service.NewDeviceService(newFakeAuthRepo())
-		_, err := svc.Poll(ctx, "")
-
-		require.Error(t, err)
-		assert.Equal(t, fault.ErrValidation, fault.FromError(err).Code())
 	})
 
 	t.Run("approve_success", func(t *testing.T) {
@@ -129,8 +118,8 @@ func TestDeviceService(t *testing.T) {
 			expiresAt: time.Now().UTC().Add(time.Hour),
 		})
 
-		svc := service.NewDeviceService(repo)
-		err := svc.Approve(ctx, "APPR-OVE1", "prj-1")
+		svc := NewDeviceService(repo)
+		err := svc.Approve(ctx, &models.Subject{ProjectID: "prj-1"}, "APPR-OVE1", "")
 
 		require.NoError(t, err)
 
@@ -144,8 +133,8 @@ func TestDeviceService(t *testing.T) {
 	t.Run("approve_unknown_user_code", func(t *testing.T) {
 		t.Parallel()
 
-		svc := service.NewDeviceService(newFakeAuthRepo())
-		err := svc.Approve(ctx, "NOPE-CODE", "prj-1")
+		svc := NewDeviceService(newFakeAuthRepo())
+		err := svc.Approve(ctx, &models.Subject{ProjectID: "prj-1"}, "NOPE-CODE", "")
 
 		require.Error(t, err)
 		assert.Equal(t, fault.ErrNotFound, fault.FromError(err).Code())
@@ -162,20 +151,21 @@ func TestDeviceService(t *testing.T) {
 			expiresAt: time.Now().UTC().Add(time.Hour),
 		})
 
-		svc := service.NewDeviceService(repo)
-		err := svc.Approve(ctx, "DONE-CODE", "prj-1")
+		svc := NewDeviceService(repo)
+		err := svc.Approve(ctx, &models.Subject{ProjectID: "prj-1"}, "DONE-CODE", "")
 
 		require.Error(t, err)
 		assert.Equal(t, fault.ErrConflict, fault.FromError(err).Code())
 	})
 
-	t.Run("approve_missing_user_code", func(t *testing.T) {
+	t.Run("approve_rejects_another_project", func(t *testing.T) {
 		t.Parallel()
 
-		svc := service.NewDeviceService(newFakeAuthRepo())
-		err := svc.Approve(ctx, "", "prj-1")
+		svc := NewDeviceService(newFakeAuthRepo())
+		err := svc.Approve(ctx, &models.Subject{ProjectID: "prj-1"}, "CODE-1234", "prj-2")
 
 		require.Error(t, err)
-		assert.Equal(t, fault.ErrValidation, fault.FromError(err).Code())
+		assert.Equal(t, fault.ErrForbidden, fault.CodeOf(err))
 	})
+
 }

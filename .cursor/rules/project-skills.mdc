@@ -20,6 +20,7 @@ alwaysApply: true
 | `go-testing` | `.claude/skills/go-testing/` | Unit/integration/e2e, testify, Makefile, compose, build-теги qrok |
 | `kafka-development` | `.claude/skills/kafka-development/` | Kafka, agent source, топики, партиции, consumer groups |
 | `rabbitmq-development` | `.claude/skills/rabbitmq-development/` | RabbitMQ / AMQP (этап 2) |
+| `ponytail` | `.claude/skills/ponytail/` | YAGNI, stdlib-first, минимальный diff; `/ponytail lite|full|ultra` |
 
 ## Добавление скилла
 

@@ -70,6 +70,10 @@ make verify       # сборка + тесты (после рефакторинг
 
 Секрет-менеджер (Doppler и т.п.) подключается без правок кода, когда появится стейджинг: конфиг читает обычные env-переменные, поэтому достаточно `doppler run -- make run-server`.
 
+Для локального compose примеры agent/listen явно используют `tls: false`. Для внешнего gateway TLS завершается на reverse proxy/LB; в agent/listen включите `tls: true` и при необходимости задайте `tls_server_name`/`tls_ca_file`. Kafka поддерживает TLS и SASL PLAIN/SCRAM через секцию `kafka`.
+
+При `http.allow_insecure_api: false` dashboard принимает project/dev token в поле Access token. Подтверждение `qrok login` также требует токен существующего проекта; новый dev token затем подходит и для gRPC listen, и для REST/replay.
+
 ## Тестирование
 
 - `make test` — unit

@@ -1,4 +1,4 @@
-package service_test
+package service
 
 import (
 	"context"
@@ -8,8 +8,6 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"qrok/internal/controlplane/infrastructure/auth"
-	"qrok/internal/controlplane/infrastructure/delivery"
-	"qrok/internal/controlplane/infrastructure/eventstore"
 	"qrok/internal/controlplane/infrastructure/models"
 )
 
@@ -70,6 +68,7 @@ func (f *fakeAuthRepo) addAgentToken(plaintext, tunnelID, tokenID, projectID str
 func (f *fakeAuthRepo) addDevToken(plaintext, tunnelID, tokenID, projectID, userID string) {
 	key := auth.HashAgentToken(plaintext) + "|" + tunnelID
 	f.devTokens[key] = tokenRec{tokenID: tokenID, projectID: projectID, userID: userID}
+	f.apiTokens[auth.HashAgentToken(plaintext)] = tokenRec{tokenID: tokenID, projectID: projectID, userID: userID}
 	f.tunnelProject[tunnelID] = projectID
 }
 
@@ -161,7 +160,7 @@ func (f *fakeAuthRepo) ConsumeDeviceToken(_ context.Context, deviceHash string) 
 	return nil
 }
 
-func (f *fakeAuthRepo) WithinTx(ctx context.Context, fn func(auth.TxRepository) error) error {
+func (f *fakeAuthRepo) WithinTx(ctx context.Context, fn func(deviceAuthTxQuerier) error) error {
 	if f.withinTxErr != nil {
 		return f.withinTxErr
 	}
@@ -353,10 +352,3 @@ func (f *fakeDeliveryRepo) ListLatestByEventIDs(_ context.Context, eventIDs []st
 	}
 	return out, nil
 }
-
-var (
-	_ auth.Repository       = (*fakeAuthRepo)(nil)
-	_ auth.TxRepository     = (*fakeAuthTx)(nil)
-	_ eventstore.Repository = (*fakeEventRepo)(nil)
-	_ delivery.Repository   = (*fakeDeliveryRepo)(nil)
-)

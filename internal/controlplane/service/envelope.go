@@ -1,52 +1,10 @@
 package service
 
 import (
-	"time"
-
-	qrokv1 "qrok/internal/proto/qrok/v1"
 	"qrok/internal/controlplane/infrastructure/models"
+	qrokv1 "qrok/internal/proto/qrok/v1"
 	"qrok/internal/tunnel"
-	"qrok/pkg/fault"
 )
-
-// EventFromProto converts a protobuf envelope into a domain event.
-func EventFromProto(envelope *qrokv1.EventEnvelope) (*models.Event, error) {
-	const op = "event.from_proto"
-	if envelope == nil {
-		return nil, fault.ErrValidation.New("empty envelope").WithOp(op)
-	}
-	if envelope.GetPayloadRef() != "" {
-		return nil, fault.ErrValidation.
-			New("payload_ref from agent is not supported").
-			WithOp(op)
-	}
-	if len(envelope.GetPayload()) == 0 {
-		return nil, fault.ErrValidation.New("empty payload").WithOp(op)
-	}
-
-	var brokerTS *time.Time
-	if ms := envelope.GetBrokerTsMs(); ms > 0 {
-		t := time.UnixMilli(ms).UTC()
-		brokerTS = &t
-	}
-
-	partition := envelope.GetPartition()
-	offset := envelope.GetOffset()
-
-	return &models.Event{
-		ID:           envelope.GetEventId(),
-		TunnelID:     envelope.GetTunnelId(),
-		SourceType:   envelope.GetSourceType(),
-		Topic:        envelope.GetTopic(),
-		Partition:    &partition,
-		BrokerOffset: &offset,
-		Key:          envelope.GetKey(),
-		Headers:      envelope.GetHeaders(),
-		Payload:      envelope.GetPayload(),
-		IsReplay:     envelope.GetIsReplay(),
-		BrokerTS:     brokerTS,
-	}, nil
-}
 
 // ToReplayEnvelope builds a protobuf envelope for replay delivery.
 func ToReplayEnvelope(ev *models.Event, payload []byte, deliveryID string) *qrokv1.EventEnvelope {

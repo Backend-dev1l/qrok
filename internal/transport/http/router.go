@@ -2,9 +2,9 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -13,39 +13,37 @@ import (
 
 	"qrok/internal/config"
 	"qrok/internal/controlplane/infrastructure/models"
-	"qrok/internal/controlplane/service"
 	"qrok/internal/middleware"
 	"qrok/pkg/fault"
 )
 
-// Deps — зависимости HTTP API.
-type Deps struct {
-	Events service.EventService
-	Replay service.ReplayService
-	Device service.DeviceService
-	Auth   service.AuthService
-	Log    *slog.Logger
-}
+type Readiness func(context.Context) error
 
 // NewRouter создаёт chi-роутер со стеком middleware control plane.
-func NewRouter(httpCfg config.HTTP, deps Deps) http.Handler {
-	if deps.Log == nil {
-		deps.Log = slog.Default()
-	}
-
+func NewRouter(httpCfg config.HTTP, h *Handler, ready Readiness) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.CORS(httpCfg.CORSOrigins))
 	r.Use(middleware.SecurityHeaders())
 	r.Use(middleware.BodyLimit(httpCfg.MaxBodyBytes))
-	r.Use(middleware.RequestLogger(deps.Log))
-	r.Use(middleware.Recoverer(deps.Log))
+	r.Use(middleware.RequestLogger(h.log))
+	r.Use(middleware.Recoverer(h.log))
 	r.Use(middleware.Timeout(time.Duration(httpCfg.RequestTimeout)))
 
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	})
+	r.Get("/ready", func(w http.ResponseWriter, r *http.Request) {
+		if ready == nil || ready(r.Context()) != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(w).Encode(map[string]string{"status": "unavailable"})
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
 	})
 
 	r.Get("/dashboard", func(w http.ResponseWriter, r *http.Request) {
@@ -54,108 +52,121 @@ func NewRouter(httpCfg config.HTTP, deps Deps) http.Handler {
 	r.Handle("/dashboard/*", http.StripPrefix("/dashboard/", dashboardHandler()))
 
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Post("/oauth/device/code", deviceCodeHandler(deps))
-		r.Post("/oauth/device/token", deviceTokenHandler(deps))
-		r.Post("/oauth/device/approve", deviceApproveHandler(deps))
+		r.Post("/oauth/device/code", h.deviceCode)
+		r.Post("/oauth/device/token", h.deviceToken)
 
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.Auth(middleware.AuthConfig{
-				Auth:          deps.Auth,
+				Auth:          h.auth,
 				AllowInsecure: httpCfg.AllowInsecureAPI,
 			}))
-			r.Get("/tunnels/{tunnelID}/events", listEvents(deps))
-			r.Get("/events/{eventID}", getEvent(deps))
-			r.Post("/events/{eventID}/replay", replayEvent(deps))
+			r.Post("/oauth/device/approve", h.deviceApprove)
+			r.Get("/tunnels/{tunnelID}/events", h.listEvents)
+			r.Get("/events/{eventID}", h.getEvent)
+			r.Post("/events/{eventID}/replay", h.replayEvent)
 		})
 	})
 
 	return r
 }
 
-func listEvents(deps Deps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		tunnelID := chi.URLParam(r, "tunnelID")
-		subject, _ := middleware.SubjectFromContext(r.Context())
+func (h *Handler) listEvents(w http.ResponseWriter, r *http.Request) {
+	tunnelID := chi.URLParam(r, "tunnelID")
+	subject, _ := middleware.SubjectFromContext(r.Context())
 
-		limit := 50
-		if raw := r.URL.Query().Get("limit"); raw != "" {
-			n, err := strconv.Atoi(raw)
-			if err != nil || n <= 0 || n > 200 {
-				fault.WriteHTTPError(r.Context(), w, fault.ErrBadRequest.New("limit: expected 1..200").WithOp("httpapi.list_events"))
-				return
-			}
-			limit = n
-		}
+	if tunnelID == "" {
+		fault.WriteHTTPError(r.Context(), w, fault.ErrValidation.New("tunnel_id is required").WithOp("httpapi.list_events"))
+		return
+	}
 
-		events, err := deps.Events.ListEvents(r.Context(), subject, tunnelID, limit)
+	limit := 50
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		n, err := strconv.Atoi(raw)
 		if err != nil {
-			fault.WriteHTTPError(r.Context(), w, err)
+			fault.WriteHTTPError(r.Context(), w, fault.ErrBadRequest.Wrap(err, "invalid limit").WithOp("httpapi.list_events"))
 			return
 		}
-
-		out := make([]eventJSON, 0, len(events))
-		for _, item := range events {
-			out = append(out, toEventJSON(item.Event, "", "", item.LatestDelivery, nil))
+		if n < 1 || n > 200 {
+			fault.WriteHTTPError(r.Context(), w, fault.ErrValidation.New("limit: expected 1..200").WithOp("httpapi.list_events"))
+			return
 		}
-
-		writeJSON(w, map[string]any{
-			"events": out,
-			"count":  len(out),
-		})
+		limit = n
 	}
+
+	events, err := h.events.ListEvents(r.Context(), subject, tunnelID, limit)
+	if err != nil {
+		fault.WriteHTTPError(r.Context(), w, err)
+		return
+	}
+
+	out := make([]eventJSON, 0, len(events))
+	for _, item := range events {
+		out = append(out, toEventJSON(item.Event, "", "", item.LatestDelivery, nil))
+	}
+
+	writeJSON(w, map[string]any{
+		"events": out,
+		"count":  len(out),
+	})
 }
 
-func getEvent(deps Deps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		eventID := chi.URLParam(r, "eventID")
-		subject, _ := middleware.SubjectFromContext(r.Context())
+func (h *Handler) getEvent(w http.ResponseWriter, r *http.Request) {
+	eventID := chi.URLParam(r, "eventID")
+	subject, _ := middleware.SubjectFromContext(r.Context())
 
-		view, err := deps.Events.GetEvent(r.Context(), subject, eventID)
-		if err != nil {
-			fault.WriteHTTPError(r.Context(), w, err)
-			return
-		}
-
-		encoding := ""
-		encoded := ""
-		if len(view.Payload) > 0 {
-			encoding = "base64"
-			encoded = base64.StdEncoding.EncodeToString(view.Payload)
-		}
-
-		writeJSON(w, toEventJSON(view.Event, encoded, encoding, nil, view.Deliveries))
+	if eventID == "" {
+		fault.WriteHTTPError(r.Context(), w, fault.ErrValidation.New("event_id is required").WithOp("httpapi.get_event"))
+		return
 	}
+
+	view, err := h.events.GetEvent(r.Context(), subject, eventID)
+	if err != nil {
+		fault.WriteHTTPError(r.Context(), w, err)
+		return
+	}
+
+	encoding := ""
+	encoded := ""
+	if len(view.Payload) > 0 {
+		encoding = "base64"
+		encoded = base64.StdEncoding.EncodeToString(view.Payload)
+	}
+
+	writeJSON(w, toEventJSON(view.Event, encoded, encoding, nil, view.Deliveries))
 }
 
-func replayEvent(deps Deps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if deps.Replay == nil {
-			fault.WriteHTTPError(r.Context(), w, fault.ErrInternal.New("replay is not configured").WithOp("httpapi.replay"))
-			return
-		}
-
-		eventID := chi.URLParam(r, "eventID")
-		subject, _ := middleware.SubjectFromContext(r.Context())
-
-		var body struct {
-			Target string `json:"target"`
-		}
-		if r.Body != nil && r.ContentLength != 0 {
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				fault.WriteHTTPError(r.Context(), w, fault.ErrBadRequest.Wrap(err, "invalid JSON").WithOp("httpapi.replay"))
-				return
-			}
-		}
-
-		result, err := deps.Replay.Replay(r.Context(), subject, eventID, body.Target)
-		if err != nil {
-			fault.WriteHTTPError(r.Context(), w, err)
-			return
-		}
-
-		w.WriteHeader(http.StatusAccepted)
-		writeJSON(w, result)
+func (h *Handler) replayEvent(w http.ResponseWriter, r *http.Request) {
+	if h.replay == nil {
+		fault.WriteHTTPError(r.Context(), w, fault.ErrInternal.New("replay is not configured").WithOp("httpapi.replay"))
+		return
 	}
+
+	eventID := chi.URLParam(r, "eventID")
+	subject, _ := middleware.SubjectFromContext(r.Context())
+
+	if eventID == "" {
+		fault.WriteHTTPError(r.Context(), w, fault.ErrValidation.New("event_id is required").WithOp("httpapi.replay"))
+		return
+	}
+
+	var body struct {
+		Target string `json:"target"`
+	}
+	if r.Body != nil && r.ContentLength != 0 {
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			fault.WriteHTTPError(r.Context(), w, fault.ErrBadRequest.Wrap(err, "invalid JSON").WithOp("httpapi.replay"))
+			return
+		}
+	}
+
+	result, err := h.replay.Replay(r.Context(), subject, eventID, body.Target)
+	if err != nil {
+		fault.WriteHTTPError(r.Context(), w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusAccepted)
+	writeJSON(w, result)
 }
 
 type deliveryJSON struct {

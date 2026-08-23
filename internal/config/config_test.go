@@ -216,3 +216,29 @@ func TestPostgresPoolConversion(t *testing.T) {
 		t.Errorf("конвертация в postgres.Config потеряла значения: %+v", pool)
 	}
 }
+
+func TestClientDefaultsUseTLS(t *testing.T) {
+	t.Parallel()
+
+	if !defaultAgent().Agent.TLS {
+		t.Fatal("agent gateway TLS must be enabled by default")
+	}
+	if !defaultListen().Listen.TLS {
+		t.Fatal("listen gateway TLS must be enabled by default")
+	}
+}
+
+func TestAgentRejectsIncompleteSASLConfig(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultAgent()
+	cfg.Agent.Token = "token"
+	cfg.Agent.TunnelID = "tunnel-1"
+	cfg.Agent.Topics = []string{"orders"}
+	cfg.Kafka.SASLMechanism = "scram-sha-256"
+
+	err := cfg.validate()
+	if fault.CodeOf(err) != fault.ErrValidation {
+		t.Fatalf("validate() error = %v, want validation", err)
+	}
+}

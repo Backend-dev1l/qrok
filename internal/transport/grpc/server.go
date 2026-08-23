@@ -25,13 +25,20 @@ type Server struct {
 
 	cfg        Config
 	bus        inproc.EventBus
-	events     service.EventService
-	auth       service.AuthService
-	deliveries service.DeliveryService
+	events     eventService
+	auth       authService
+	deliveries deliveryService
 	log        *slog.Logger
 }
 
-func NewServer(cfg Config, eventBus inproc.EventBus, events service.EventService, authSvc service.AuthService, deliveries service.DeliveryService, log *slog.Logger) *Server {
+func NewServer(
+	cfg Config,
+	eventBus inproc.EventBus,
+	events *service.Event,
+	authSvc *service.Auth,
+	deliveries *service.Delivery,
+	log *slog.Logger,
+) *Server {
 	if log == nil {
 		log = slog.Default()
 	}
@@ -62,6 +69,10 @@ func (s *Server) AgentStream(stream grpc.BidiStreamingServer[qrokv1.AgentStreamR
 	if s.auth == nil {
 		return fault.ErrInternal.New("auth is not configured").WithOp("gateway.agent_stream")
 	}
+	if hello.GetTunnelId() == "" {
+		return fault.ErrValidation.New("tunnel_id is required").WithOp("gateway.agent_stream")
+	}
+
 	subject, err := s.auth.AuthenticateAgent(stream.Context(), token, hello.GetTunnelId())
 	if err != nil {
 		return err
@@ -90,11 +101,18 @@ func (s *Server) AgentStream(stream grpc.BidiStreamingServer[qrokv1.AgentStreamR
 			return fault.ErrInternal.New("event service is not configured").WithOp("gateway.agent_stream")
 		}
 
-		row, err := service.EventFromProto(ev)
+		if err := validateEventEnvelope("gateway.agent_stream", ev); err != nil {
+			return err
+		}
+		if s.cfg.MaxPayloadBytes > 0 && int64(len(ev.GetPayload())) > s.cfg.MaxPayloadBytes {
+			return fault.ErrValidation.New("payload exceeds limit").WithOp("gateway.agent_stream")
+		}
+
+		row, err := eventFromProto(ev)
 		if err != nil {
 			return err
 		}
-		inserted, err := s.events.Ingest(stream.Context(), subject, row, s.cfg.MaxPayloadBytes)
+		inserted, err := s.events.Ingest(stream.Context(), subject, row)
 		if err != nil {
 			return err
 		}
@@ -126,6 +144,11 @@ func (s *Server) ListenStream(stream grpc.BidiStreamingServer[qrokv1.ListenStrea
 		return fault.ErrBadRequest.New("first message must be Subscribe").WithOp("gateway.listen_stream")
 	}
 
+	if sub.GetTunnelId() == "" {
+		return fault.ErrValidation.New("tunnel_id is required").WithOp("gateway.listen_stream")
+	}
+
+	subject := &models.Subject{AllowAll: true}
 	if !s.cfg.AllowInsecureListen {
 		token, err := bearerToken(stream.Context())
 		if err != nil {
@@ -137,7 +160,8 @@ func (s *Server) ListenStream(stream grpc.BidiStreamingServer[qrokv1.ListenStrea
 		if s.auth == nil {
 			return fault.ErrInternal.New("auth is not configured").WithOp("gateway.listen_stream")
 		}
-		if _, err := s.auth.AuthenticateDev(stream.Context(), token, sub.GetTunnelId()); err != nil {
+		subject, err = s.auth.AuthenticateDev(stream.Context(), token, sub.GetTunnelId())
+		if err != nil {
 			return err
 		}
 	}
@@ -166,7 +190,7 @@ func (s *Server) ListenStream(stream grpc.BidiStreamingServer[qrokv1.ListenStrea
 				return
 			}
 			if dr := req.GetDeliveryResult(); dr != nil {
-				s.recordDeliveryResult(stream.Context(), dr)
+				s.recordDeliveryResult(stream.Context(), subject, dr)
 			}
 		}
 	}()
@@ -196,11 +220,27 @@ func (s *Server) ListenStream(stream grpc.BidiStreamingServer[qrokv1.ListenStrea
 	}
 }
 
-func (s *Server) recordDeliveryResult(ctx context.Context, result *qrokv1.DeliveryResult) {
+func (s *Server) recordDeliveryResult(ctx context.Context, subject *models.Subject, result *qrokv1.DeliveryResult) {
 	if s.deliveries == nil {
 		return
 	}
-	err := s.deliveries.RecordResult(ctx, &models.DeliveryResult{
+	if result == nil {
+		return
+	}
+	if result.GetDeliveryId() == "" {
+		s.log.LogAttrs(ctx, slog.LevelWarn, "invalid DeliveryResult", fault.LogAttrs(
+			fault.ErrValidation.New("delivery_id is required").WithOp("gateway.delivery_result"),
+		)...)
+		return
+	}
+	if result.GetEventId() == "" {
+		s.log.LogAttrs(ctx, slog.LevelWarn, "invalid DeliveryResult", fault.LogAttrs(
+			fault.ErrValidation.New("event_id is required").WithOp("gateway.delivery_result"),
+		)...)
+		return
+	}
+
+	err := s.deliveries.RecordResult(ctx, subject, &models.DeliveryResult{
 		DeliveryID: result.GetDeliveryId(),
 		EventID:    result.GetEventId(),
 		StatusCode: result.GetStatusCode(),

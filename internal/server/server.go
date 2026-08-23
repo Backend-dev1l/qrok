@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 
 	"qrok/internal/bus/inproc"
 	"qrok/internal/config"
@@ -73,12 +74,21 @@ func Run(configPath string) error {
 
 	eventBus := inproc.New(256)
 	authSvc := service.NewAuthService(authRepo)
-	deviceSvc := service.NewDeviceService(authRepo)
+	deviceSvc := service.NewDeviceService(service.DeviceAuthRepository(authRepo))
 	eventSvc := service.NewEventService(eventRepo, deliveryRepo, authRepo)
-	deliverySvc := service.NewDeliveryService(deliveryRepo)
+	deliverySvc := service.NewDeliveryService(deliveryRepo, authRepo)
 	replaySvc := service.NewReplayService(eventRepo, deliveryRepo, authRepo, eventBus)
 
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			Time:    30 * time.Second,
+			Timeout: 10 * time.Second,
+		}),
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             20 * time.Second,
+			PermitWithoutStream: true,
+		}),
+	)
 	gw := gateway.NewServer(gateway.Config{
 		AllowInsecureListen: cfg.Gateway.AllowInsecureListen,
 		MaxPayloadBytes:     cfg.Events.MaxPayloadBytes,
@@ -99,15 +109,21 @@ func Run(configPath string) error {
 		errCh <- grpcServer.Serve(lis)
 	}()
 
+	httpHandler := httpapi.NewHandler(eventSvc, replaySvc, deviceSvc, authSvc, log)
+	ready := func(ctx context.Context) error {
+		if err := pool.Ping(ctx); err != nil {
+			return err
+		}
+		return objects.Ping(ctx)
+	}
+	requestTimeout := time.Duration(cfg.HTTP.RequestTimeout)
 	httpServer := &http.Server{
-		Addr: cfg.HTTP.Addr,
-		Handler: httpapi.NewRouter(cfg.HTTP, httpapi.Deps{
-			Events: eventSvc,
-			Replay: replaySvc,
-			Device: deviceSvc,
-			Auth:   authSvc,
-			Log:    log,
-		}),
+		Addr:              cfg.HTTP.Addr,
+		Handler:           httpapi.NewRouter(cfg.HTTP, httpHandler, ready),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       requestTimeout + 5*time.Second,
+		WriteTimeout:      requestTimeout + 5*time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 	go func() {
 		dashboardLocal, dashboardLAN := httpDashboardURLs(cfg.HTTP.Addr)

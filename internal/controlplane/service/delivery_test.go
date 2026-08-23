@@ -1,4 +1,4 @@
-package service_test
+package service
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"qrok/internal/controlplane/infrastructure/models"
-	"qrok/internal/controlplane/service"
 	"qrok/pkg/fault"
 )
 
@@ -16,14 +15,15 @@ func TestDeliveryService(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
+	insecure := &models.Subject{AllowAll: true}
 
 	t.Run("record_result_delivered", func(t *testing.T) {
 		t.Parallel()
 
 		repo := &fakeDeliveryRepo{}
-		svc := service.NewDeliveryService(repo)
+		svc := NewDeliveryService(repo, nil)
 
-		err := svc.RecordResult(ctx, &models.DeliveryResult{
+		err := svc.RecordResult(ctx, insecure, &models.DeliveryResult{
 			DeliveryID: "del-1",
 			EventID:    "ev-1",
 			StatusCode: 200,
@@ -45,9 +45,9 @@ func TestDeliveryService(t *testing.T) {
 		t.Parallel()
 
 		repo := &fakeDeliveryRepo{}
-		svc := service.NewDeliveryService(repo)
+		svc := NewDeliveryService(repo, nil)
 
-		err := svc.RecordResult(ctx, &models.DeliveryResult{
+		err := svc.RecordResult(ctx, insecure, &models.DeliveryResult{
 			DeliveryID: "del-2",
 			EventID:    "ev-1",
 			StatusCode: 500,
@@ -62,9 +62,9 @@ func TestDeliveryService(t *testing.T) {
 		t.Parallel()
 
 		repo := &fakeDeliveryRepo{}
-		svc := service.NewDeliveryService(repo)
+		svc := NewDeliveryService(repo, nil)
 
-		err := svc.RecordResult(ctx, &models.DeliveryResult{
+		err := svc.RecordResult(ctx, insecure, &models.DeliveryResult{
 			DeliveryID: "del-3",
 			EventID:    "ev-1",
 			StatusCode: 200,
@@ -78,13 +78,23 @@ func TestDeliveryService(t *testing.T) {
 		assert.Equal(t, "connection reset", rec.Error)
 	})
 
-	t.Run("record_result_validation", func(t *testing.T) {
+	t.Run("rejects_result_for_another_project", func(t *testing.T) {
 		t.Parallel()
 
-		svc := service.NewDeliveryService(&fakeDeliveryRepo{})
-		err := svc.RecordResult(ctx, nil)
+		repo := &fakeDeliveryRepo{}
+		scope := newFakeAuthRepo()
+		scope.eventProject["ev-1"] = "project-a"
+		svc := NewDeliveryService(repo, scope)
+
+		err := svc.RecordResult(ctx, &models.Subject{ProjectID: "project-b"}, &models.DeliveryResult{
+			DeliveryID: "del-1",
+			EventID:    "ev-1",
+			StatusCode: 200,
+		})
 
 		require.Error(t, err)
-		assert.Equal(t, fault.ErrValidation, fault.FromError(err).Code())
+		assert.Equal(t, fault.ErrForbidden, fault.CodeOf(err))
+		assert.Empty(t, repo.upserted)
 	})
+
 }

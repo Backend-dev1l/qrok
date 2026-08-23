@@ -1,10 +1,19 @@
 const $ = (id) => document.getElementById(id);
 let selectedId = '';
+const tokenStorageKey = 'qrok_access_token';
+
+$('token').value = sessionStorage.getItem(tokenStorageKey) || '';
 
 function setStatus(msg, cls = '') {
   const el = $('status');
   el.textContent = msg;
   el.className = 'status ' + cls;
+}
+
+function escapeHTML(value) {
+  return String(value).replace(/[&<>"']/g, (ch) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[ch]);
 }
 
 function deliveryBadge(delivery) {
@@ -16,14 +25,24 @@ function deliveryBadge(delivery) {
     failed: 'badge-failed',
     pending: 'badge-pending',
   }[delivery.status] || 'badge-none';
-  const label = delivery.status;
-  const extra = delivery.status_code ? ` (${delivery.status_code})` : '';
+  const label = escapeHTML(delivery.status);
+  const extra = delivery.status_code ? ` (${escapeHTML(delivery.status_code)})` : '';
   return `<span class="badge ${cls}">${label}${extra}</span>`;
 }
 
 async function api(path, opts = {}) {
+  const token = $('token').value.trim();
+  if (token) {
+    sessionStorage.setItem(tokenStorageKey, token);
+  } else {
+    sessionStorage.removeItem(tokenStorageKey);
+  }
   const res = await fetch(path, {
-    headers: { Accept: 'application/json', ...(opts.headers || {}) },
+    headers: {
+      Accept: 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(opts.headers || {}),
+    },
     ...opts,
   });
   const body = await res.json().catch(() => ({}));
@@ -40,11 +59,11 @@ function renderRows(events) {
   for (const ev of events) {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><code>${ev.id}</code></td>
-      <td>${ev.topic}</td>
-      <td>${ev.payload_size}</td>
+      <td><code>${escapeHTML(ev.id)}</code></td>
+      <td>${escapeHTML(ev.topic)}</td>
+      <td>${escapeHTML(ev.payload_size)}</td>
       <td>${deliveryBadge(ev.latest_delivery)}</td>
-      <td>${new Date(ev.created_at).toLocaleString()}</td>
+      <td>${escapeHTML(new Date(ev.created_at).toLocaleString())}</td>
       <td>${ev.is_replay ? 'yes' : ''}</td>`;
     tr.onclick = () => selectEvent(ev.id);
     tbody.appendChild(tr);
@@ -65,13 +84,13 @@ function renderDeliveries(deliveries) {
   for (const d of deliveries) {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><code>${d.id}</code></td>
-      <td>${d.kind}</td>
+      <td><code>${escapeHTML(d.id)}</code></td>
+      <td>${escapeHTML(d.kind)}</td>
       <td>${deliveryBadge(d)}</td>
-      <td>${d.status_code ?? '—'}</td>
-      <td>${d.error || ''}</td>
-      <td>${d.latency_ms != null ? d.latency_ms + ' ms' : '—'}</td>
-      <td>${new Date(d.created_at).toLocaleString()}</td>`;
+      <td>${escapeHTML(d.status_code ?? '—')}</td>
+      <td>${escapeHTML(d.error || '')}</td>
+      <td>${escapeHTML(d.latency_ms != null ? d.latency_ms + ' ms' : '—')}</td>
+      <td>${escapeHTML(new Date(d.created_at).toLocaleString())}</td>`;
     tbody.appendChild(tr);
   }
 }

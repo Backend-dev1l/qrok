@@ -39,7 +39,11 @@ func (b *Bus) Publish(_ context.Context, event *qrokv1.EventEnvelope) error {
 	defer b.mu.RUnlock()
 
 	for _, ch := range b.subs {
-		ch <- event
+		select {
+		case ch <- event:
+		default:
+			// Live delivery is best-effort; the durable event remains replayable.
+		}
 	}
 	return nil
 }

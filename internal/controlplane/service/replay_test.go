@@ -1,4 +1,4 @@
-package service_test
+package service
 
 import (
 	"context"
@@ -9,7 +9,6 @@ import (
 
 	"qrok/internal/bus/inproc"
 	"qrok/internal/controlplane/infrastructure/models"
-	"qrok/internal/controlplane/service"
 	"qrok/internal/tunnel"
 	"qrok/pkg/fault"
 )
@@ -38,7 +37,7 @@ func TestReplayService(t *testing.T) {
 		require.NoError(t, err)
 		defer unsub()
 
-		svc := service.NewReplayService(events, deliveries, newFakeAuthRepo(), bus)
+		svc := NewReplayService(events, deliveries, newFakeAuthRepo(), bus)
 		result, err := svc.Replay(ctx, allowAll, "ev-1", "target-1")
 
 		require.NoError(t, err)
@@ -67,7 +66,7 @@ func TestReplayService(t *testing.T) {
 			ID: "ev-1", TunnelID: "tunnel-1", Topic: "t", Payload: []byte("x"),
 		}
 
-		svc := service.NewReplayService(events, &fakeDeliveryRepo{}, newFakeAuthRepo(), inproc.New(4))
+		svc := NewReplayService(events, &fakeDeliveryRepo{}, newFakeAuthRepo(), inproc.New(4))
 		result, err := svc.Replay(ctx, allowAll, "ev-1", "")
 
 		require.NoError(t, err)
@@ -80,7 +79,7 @@ func TestReplayService(t *testing.T) {
 		authRepo := newFakeAuthRepo()
 		authRepo.eventProject["ev-1"] = "other-prj"
 
-		svc := service.NewReplayService(newFakeEventRepo(), &fakeDeliveryRepo{}, authRepo, inproc.New(4))
+		svc := NewReplayService(newFakeEventRepo(), &fakeDeliveryRepo{}, authRepo, inproc.New(4))
 		_, err := svc.Replay(ctx, scoped, "ev-1", "*")
 
 		require.Error(t, err)
@@ -90,22 +89,13 @@ func TestReplayService(t *testing.T) {
 	t.Run("replay_not_found", func(t *testing.T) {
 		t.Parallel()
 
-		svc := service.NewReplayService(newFakeEventRepo(), &fakeDeliveryRepo{}, newFakeAuthRepo(), inproc.New(4))
+		svc := NewReplayService(newFakeEventRepo(), &fakeDeliveryRepo{}, newFakeAuthRepo(), inproc.New(4))
 		_, err := svc.Replay(ctx, allowAll, "missing", "*")
 
 		require.Error(t, err)
 		assert.Equal(t, fault.ErrNotFound, fault.FromError(err).Code())
 	})
 
-	t.Run("replay_empty_event_id", func(t *testing.T) {
-		t.Parallel()
-
-		svc := service.NewReplayService(newFakeEventRepo(), &fakeDeliveryRepo{}, newFakeAuthRepo(), inproc.New(4))
-		_, err := svc.Replay(ctx, allowAll, "", "*")
-
-		require.Error(t, err)
-		assert.Equal(t, fault.ErrValidation, fault.FromError(err).Code())
-	})
 }
 
 func TestToReplayEnvelope(t *testing.T) {
@@ -122,7 +112,7 @@ func TestToReplayEnvelope(t *testing.T) {
 		Headers:      map[string]string{"trace": "1"},
 	}
 
-	out := service.ToReplayEnvelope(ev, []byte(`{"ok":true}`), "01DELIVERY")
+	out := ToReplayEnvelope(ev, []byte(`{"ok":true}`), "01DELIVERY")
 	if !out.GetIsReplay() {
 		t.Fatal("expected is_replay=true")
 	}

@@ -29,7 +29,7 @@ type Client struct {
 	client *http.Client
 }
 
-func New(url string, timeout time.Duration) Sink {
+func New(url string, timeout time.Duration) *Client {
 	if timeout <= 0 {
 		timeout = 10 * time.Second
 	}
@@ -62,7 +62,7 @@ func (c *Client) Deliver(ctx context.Context, ev *qrokv1.EventEnvelope) Delivery
 	if err != nil {
 		return Delivery{Error: err.Error(), LatencyMS: latency}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return Delivery{

@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	configPath := flag.String("config", "", "путь к YAML-конфигу (по умолчанию $QROK_CONFIG, затем qrok.yaml)")
+	configPath := flag.String("config", "", "path to YAML config (defaults to $QROK_CONFIG, then qrok.yaml)")
 	flag.Parse()
 
 	if err := server.Run(*configPath); err != nil {

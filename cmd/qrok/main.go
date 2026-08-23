@@ -1,4 +1,4 @@
-// qrok — единый CLI: агент на стейджинге (qrok agent) и dev-клиент (qrok listen).
+// qrok — unified CLI: staging agent (qrok agent) and dev client (qrok listen).
 package main
 
 import (
@@ -20,7 +20,7 @@ func main() {
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "qrok",
-		Short: "Туннель и реплеер для асинхронных событий (Kafka/RabbitMQ -> localhost)",
+		Short: "Tunnel and replayer for async events (Kafka/RabbitMQ -> localhost)",
 	}
 
 	root.AddCommand(
@@ -34,25 +34,12 @@ func newRootCmd() *cobra.Command {
 	return root
 }
 
-func notImplemented(name, short string) *cobra.Command {
-	return &cobra.Command{
-		Use:   name,
-		Short: short,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return fault.ErrUnprocessable.
-				Newf("command %q is not implemented yet", name).
-				WithOp("cli." + name).
-				WithHint("implementation is stage 1, see docs/TZ.md")
-		},
-	}
-}
-
 func versionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
-		Short: "Версия CLI",
+		Short: "CLI version",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println("qrok dev (этап 1, cobra)")
+			fmt.Println("qrok dev (stage 1, cobra)")
 		},
 	}
 }

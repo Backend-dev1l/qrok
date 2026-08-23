@@ -16,7 +16,7 @@ func Recoverer(log *slog.Logger) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			defer func() {
 				if rec := recover(); rec != nil {
-					log.Error("panic в HTTP-хендлере", "panic", rec, "path", r.URL.Path)
+					log.Error("panic in HTTP handler", "panic", rec, "path", r.URL.Path)
 					fault.WriteHTTPError(r.Context(), w, fault.ErrInternal.New("internal server error"))
 				}
 			}()

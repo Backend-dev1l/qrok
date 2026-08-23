@@ -8,31 +8,32 @@ import (
 	"qrok/pkg/fault"
 )
 
-// AuthService authenticates callers and checks access scope.
-type AuthService interface {
-	AuthenticateAPI(ctx context.Context, plaintext string) (*models.Subject, error)
-	AuthenticateAgent(ctx context.Context, plaintext, tunnelID string) (*models.Subject, error)
-	AuthenticateDev(ctx context.Context, plaintext, tunnelID string) (*models.Subject, error)
-	InsecureSubject() *models.Subject
+type authQuerier interface {
+	FindAgentToken(ctx context.Context, tokenHash, tunnelID string) (tokenID, projectID string, err error)
+	FindAPIToken(ctx context.Context, tokenHash string) (tokenID, projectID string, err error)
+	FindDevToken(ctx context.Context, tokenHash, tunnelID string) (tokenID, projectID, userID string, err error)
 }
 
-type authService struct {
-	repo auth.Repository
+type scopeQuerier interface {
+	TunnelOwnedByProject(ctx context.Context, projectID, tunnelID string) (bool, error)
+	EventOwnedByProject(ctx context.Context, projectID, eventID string) (bool, error)
 }
 
-func NewAuthService(repo auth.Repository) AuthService {
-	return &authService{repo: repo}
+// Auth authenticates callers and checks access scope.
+type Auth struct {
+	repo authQuerier
 }
 
-func (s *authService) InsecureSubject() *models.Subject {
+func NewAuthService(repo authQuerier) *Auth {
+	return &Auth{repo: repo}
+}
+
+func (s *Auth) InsecureSubject() *models.Subject {
 	return &models.Subject{AllowAll: true}
 }
 
-func (s *authService) AuthenticateAPI(ctx context.Context, plaintext string) (*models.Subject, error) {
+func (s *Auth) AuthenticateAPI(ctx context.Context, plaintext string) (*models.Subject, error) {
 	const op = "auth.authenticate_api"
-	if plaintext == "" {
-		return nil, fault.ErrUnauthorized.New("token required").WithOp(op)
-	}
 
 	tokenID, projectID, err := s.repo.FindAPIToken(ctx, auth.HashAgentToken(plaintext))
 	if err != nil {
@@ -45,11 +46,8 @@ func (s *authService) AuthenticateAPI(ctx context.Context, plaintext string) (*m
 	}, nil
 }
 
-func (s *authService) AuthenticateAgent(ctx context.Context, plaintext, tunnelID string) (*models.Subject, error) {
+func (s *Auth) AuthenticateAgent(ctx context.Context, plaintext, tunnelID string) (*models.Subject, error) {
 	const op = "auth.authenticate_agent"
-	if plaintext == "" || tunnelID == "" {
-		return nil, fault.ErrUnauthorized.New("token and tunnel_id required").WithOp(op)
-	}
 
 	tokenID, projectID, err := s.repo.FindAgentToken(ctx, auth.HashAgentToken(plaintext), tunnelID)
 	if err != nil {
@@ -63,11 +61,8 @@ func (s *authService) AuthenticateAgent(ctx context.Context, plaintext, tunnelID
 	}, nil
 }
 
-func (s *authService) AuthenticateDev(ctx context.Context, plaintext, tunnelID string) (*models.Subject, error) {
+func (s *Auth) AuthenticateDev(ctx context.Context, plaintext, tunnelID string) (*models.Subject, error) {
 	const op = "auth.authenticate_dev"
-	if plaintext == "" || tunnelID == "" {
-		return nil, fault.ErrUnauthorized.New("dev token and tunnel_id required").WithOp(op)
-	}
 	if !auth.IsDevToken(plaintext) {
 		return nil, fault.ErrUnauthorized.New("expected dev token (qrok_dev_…)").WithOp(op)
 	}
@@ -85,15 +80,12 @@ func (s *authService) AuthenticateDev(ctx context.Context, plaintext, tunnelID s
 	}, nil
 }
 
-func authorizeTunnel(ctx context.Context, repo auth.Repository, subject *models.Subject, tunnelID string) error {
+func authorizeTunnel(ctx context.Context, repo scopeQuerier, subject *models.Subject, tunnelID string) error {
 	const op = "auth.authorize_tunnel"
-	if subject == nil || subject.AllowAll {
+	if subject != nil && subject.AllowAll {
 		return nil
 	}
-	if tunnelID == "" {
-		return validationErr(op, "tunnel_id is required")
-	}
-	if subject.ProjectID == "" {
+	if subject == nil || subject.ProjectID == "" {
 		return fault.ErrUnauthorized.New("authorization required").WithOp(op)
 	}
 
@@ -107,15 +99,12 @@ func authorizeTunnel(ctx context.Context, repo auth.Repository, subject *models.
 	return nil
 }
 
-func authorizeEvent(ctx context.Context, repo auth.Repository, subject *models.Subject, eventID string) error {
+func authorizeEvent(ctx context.Context, repo scopeQuerier, subject *models.Subject, eventID string) error {
 	const op = "auth.authorize_event"
-	if subject == nil || subject.AllowAll {
+	if subject != nil && subject.AllowAll {
 		return nil
 	}
-	if eventID == "" {
-		return validationErr(op, "event_id is required")
-	}
-	if subject.ProjectID == "" {
+	if subject == nil || subject.ProjectID == "" {
 		return fault.ErrUnauthorized.New("authorization required").WithOp(op)
 	}
 
@@ -130,15 +119,17 @@ func authorizeEvent(ctx context.Context, repo auth.Repository, subject *models.S
 }
 
 func ensureSubject(subject *models.Subject) error {
-	if subject == nil || subject.AllowAll || subject.ProjectID != "" {
+	if subject != nil && (subject.AllowAll || subject.ProjectID != "") {
 		return nil
 	}
 	return fault.ErrUnauthorized.New("authorization required").WithOp("auth.ensure_subject")
 }
 
 // Test helpers expose internal error mapping for contract tests.
-func MapRepoErrForTest(op string, err error) error       { return mapRepoErr(op, err) }
-func NotFoundErrForTest(op, message string, err error) error { return notFoundErr(op, message, err) }
+func MapRepoErrForTest(op string, err error) error { return mapRepoErr(op, err) }
+func NotFoundErrForTest(op, message string, err error) error {
+	return notFoundErr(op, message, err)
+}
 func UnauthorizedErrForTest(op, message string, err error) error {
 	return unauthorizedErr(op, message, err)
 }

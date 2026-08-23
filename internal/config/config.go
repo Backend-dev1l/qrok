@@ -210,16 +210,16 @@ func applyServerEnv(cfg *Server) error {
 
 func (c *Server) validate() error {
 	if c.Events.PayloadThresholdBytes <= 0 {
-		return validationErr("events.payload_threshold_bytes должен быть > 0")
+		return validationErr("events.payload_threshold_bytes must be greater than zero")
 	}
 	if c.Events.MaxPayloadBytes < c.Events.PayloadThresholdBytes {
-		return validationErr("events.max_payload_bytes не может быть меньше payload_threshold_bytes")
+		return validationErr("events.max_payload_bytes cannot be less than payload_threshold_bytes")
 	}
 	if c.Postgres.DSN == "" {
-		return validationErr("postgres.dsn обязателен")
+		return validationErr("postgres.dsn is required")
 	}
 	if c.HTTP.Addr == "" || c.GRPC.Addr == "" {
-		return validationErr("http.addr и grpc.addr обязательны")
+		return validationErr("http.addr and grpc.addr are required")
 	}
 	return nil
 }
@@ -244,7 +244,7 @@ func envInt64(key string, dst *int64) error {
 	n, err := strconv.ParseInt(v, 10, 64)
 	if err != nil {
 		return fault.ErrValidation.
-			Wrapf(err, "%s: ожидалось целое число, получено %q", key, v).
+			Wrapf(err, "%s: expected an integer, got %q", key, v).
 			WithOp("config.env")
 	}
 	*dst = n
@@ -259,7 +259,7 @@ func envBool(key string, dst *bool) error {
 	b, err := strconv.ParseBool(v)
 	if err != nil {
 		return fault.ErrValidation.
-			Wrapf(err, "%s: ожидалось true/false, получено %q", key, v).
+			Wrapf(err, "%s: expected true or false, got %q", key, v).
 			WithOp("config.env")
 	}
 	*dst = b

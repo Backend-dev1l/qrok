@@ -19,9 +19,10 @@
 </head>
 <body>
   <h1>qrok — подтверждение входа</h1>
-  <p>Введите код из терминала (<code>qrok login</code>) и project_id из <code>make seed-dev</code>.</p>
+  <p>Введите код из терминала (<code>qrok login</code>) и токен проекта. Для локального seed используйте выданный agent token.</p>
   <label>User code <input id="user-code" placeholder="ABCD-EFGH" autocomplete="off"></label>
-  <label>Project ID <input id="project-id" value="01DEVPRJ000000000000000000" size="32"></label>
+  <label>Project access token <input id="token" type="password" autocomplete="off"></label>
+  <label>Project ID (только insecure dev) <input id="project-id" placeholder="dev project ID" size="32"></label>
   <button id="approve" type="button">Подтвердить</button>
   <div id="status" class="status"></div>
   <p><a href="/dashboard/">← к ленте событий</a></p>

@@ -3,30 +3,25 @@ package delivery
 
 import (
 	"context"
+	"errors"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"qrok/internal/controlplane/infrastructure/models"
 )
 
-// Repository stores delivery records in Postgres.
-type Repository interface {
-	CreatePending(ctx context.Context, rec *models.Delivery) error
-	UpsertResult(ctx context.Context, rec *models.Delivery) error
-	GetByID(ctx context.Context, id string) (*models.Delivery, error)
-	ListByEventID(ctx context.Context, eventID string) ([]*models.Delivery, error)
-	ListLatestByEventIDs(ctx context.Context, eventIDs []string) (map[string]*models.Delivery, error)
-}
+var ErrDeliveryEventMismatch = errors.New("delivery belongs to a different event")
 
-type repository struct {
+// Repository stores delivery records in Postgres.
+type Repository struct {
 	pool *pgxpool.Pool
 }
 
-func NewRepository(pool *pgxpool.Pool) Repository {
-	return &repository{pool: pool}
+func NewRepository(pool *pgxpool.Pool) *Repository {
+	return &Repository{pool: pool}
 }
 
-func (r *repository) CreatePending(ctx context.Context, rec *models.Delivery) error {
+func (r *Repository) CreatePending(ctx context.Context, rec *models.Delivery) error {
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO deliveries (id, event_id, target_id, kind, status)
 		VALUES ($1, $2, $3, $4, $5)
@@ -34,8 +29,8 @@ func (r *repository) CreatePending(ctx context.Context, rec *models.Delivery) er
 	return err
 }
 
-func (r *repository) UpsertResult(ctx context.Context, rec *models.Delivery) error {
-	_, err := r.pool.Exec(ctx, `
+func (r *Repository) UpsertResult(ctx context.Context, rec *models.Delivery) error {
+	tag, err := r.pool.Exec(ctx, `
 		INSERT INTO deliveries (id, event_id, target_id, kind, status, status_code, error, latency_ms)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (id) DO UPDATE SET
@@ -43,12 +38,19 @@ func (r *repository) UpsertResult(ctx context.Context, rec *models.Delivery) err
 			status_code = EXCLUDED.status_code,
 			error = EXCLUDED.error,
 			latency_ms = EXCLUDED.latency_ms
+		WHERE deliveries.event_id = EXCLUDED.event_id
 	`, rec.ID, rec.EventID, rec.TargetID, string(rec.Kind), string(rec.Status),
 		rec.StatusCode, nullIfEmpty(rec.Error), rec.LatencyMS)
-	return err
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrDeliveryEventMismatch
+	}
+	return nil
 }
 
-func (r *repository) GetByID(ctx context.Context, id string) (*models.Delivery, error) {
+func (r *Repository) GetByID(ctx context.Context, id string) (*models.Delivery, error) {
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, event_id, target_id, kind, status, status_code, error, latency_ms, created_at
 		FROM deliveries WHERE id = $1
@@ -79,7 +81,7 @@ func (r *repository) GetByID(ctx context.Context, id string) (*models.Delivery, 
 	return &rec, nil
 }
 
-func (r *repository) ListByEventID(ctx context.Context, eventID string) ([]*models.Delivery, error) {
+func (r *Repository) ListByEventID(ctx context.Context, eventID string) ([]*models.Delivery, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, event_id, target_id, kind, status, status_code, error, latency_ms, created_at
 		FROM deliveries
@@ -94,7 +96,7 @@ func (r *repository) ListByEventID(ctx context.Context, eventID string) ([]*mode
 	return scanDeliveries(rows)
 }
 
-func (r *repository) ListLatestByEventIDs(ctx context.Context, eventIDs []string) (map[string]*models.Delivery, error) {
+func (r *Repository) ListLatestByEventIDs(ctx context.Context, eventIDs []string) (map[string]*models.Delivery, error) {
 	if len(eventIDs) == 0 {
 		return map[string]*models.Delivery{}, nil
 	}

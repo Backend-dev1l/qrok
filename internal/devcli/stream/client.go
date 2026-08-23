@@ -17,8 +17,8 @@ type ListenClient struct {
 	client qrokv1.TunnelServiceClient
 }
 
-func NewListenClient(ctx context.Context, gatewayAddr string) (*ListenClient, error) {
-	conn, err := grpcutil.Dial(ctx, gatewayAddr)
+func NewListenClient(ctx context.Context, gatewayAddr string, tlsConfig grpcutil.Config) (*ListenClient, error) {
+	conn, err := grpcutil.Dial(ctx, gatewayAddr, tlsConfig)
 	if err != nil {
 		return nil, err
 	}

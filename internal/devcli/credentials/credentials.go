@@ -82,7 +82,7 @@ func ResolveToken(configToken string) (string, error) {
 	}
 	if creds == nil || creds.AccessToken == "" {
 		return "", fault.ErrUnauthorized.
-			New("dev-токен не найден").
+			New("dev token not found").
 			WithOp("credentials.resolve").
 			WithHint("run qrok login or set listen.token in config")
 	}

@@ -6,9 +6,10 @@ log:
   format: pretty
 
 agent:
-  token: "qrok_agt_-itEbS1fisCPAjXuKw2OrlwzZFomuASKzj3YSur3H-s" # qrok_agt_... (make seed-dev)
+  token: "qrok_agt_REPLACE_ME" # replace with the token printed by make seed-dev
   tunnel_id: dev-tunnel # dev-tunnel (make seed-dev)
   gateway: localhost:9090
+  tls: false # local dev only; use true through the production TLS proxy
   source_type: kafka
   topics:
     - demo
@@ -17,6 +18,10 @@ kafka:
   brokers:
     - localhost:9092
   start_from_oldest: true # для первого прогона: прочитать уже существующие сообщения
+  tls: false # local dev only
+  # sasl_mechanism: scram-sha-256 # plain | scram-sha-256 | scram-sha-512
+  # sasl_username: qrok
+  # sasl_password: secret
 
 events:
   max_payload_bytes: 1048576

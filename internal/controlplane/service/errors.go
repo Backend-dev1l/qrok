@@ -50,21 +50,6 @@ func forbiddenErr(op, message string) *fault.Fault {
 	return fault.ErrForbidden.New(message).WithOp(op)
 }
 
-func validationErr(op, message string) *fault.Fault {
-	return fault.ErrValidation.New(message).WithOp(op)
-}
-
-func conflictErr(op, message string, err error) error {
-	if err == nil {
-		return nil
-	}
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-		return fault.ErrConflict.New(message).WithOp(op)
-	}
-	return mapRepoErr(op, err)
-}
-
 func mapRepoErr(op string, err error) error {
 	if err == nil {
 		return nil

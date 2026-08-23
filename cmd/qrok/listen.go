@@ -19,7 +19,7 @@ func newListenCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "listen",
-		Short: "Получать события на локальной машине и доставлять на localhost",
+		Short: "Receive events locally and forward to localhost",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.LoadListen(configPath)
 			if err != nil {
@@ -46,6 +46,6 @@ func newListenCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&configPath, "config", "", "путь к YAML-конфигу dev-клиента")
+	cmd.Flags().StringVar(&configPath, "config", "", "path to dev client YAML config")
 	return cmd
 }

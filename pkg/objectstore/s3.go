@@ -85,7 +85,7 @@ func (c *Client) Get(ctx context.Context, key string) ([]byte, error) {
 			WithOp("objectstore.get").
 			WithArg("key", key)
 	}
-	defer obj.Close()
+	defer func() { _ = obj.Close() }()
 
 	data, err := io.ReadAll(obj)
 	if err != nil {
@@ -101,6 +101,18 @@ func (c *Client) Get(ctx context.Context, key string) ([]byte, error) {
 			WithArg("key", key)
 	}
 	return data, nil
+}
+
+// Ping checks that the configured bucket is reachable.
+func (c *Client) Ping(ctx context.Context) error {
+	exists, err := c.client.BucketExists(ctx, c.bucket)
+	if err != nil {
+		return fault.ErrServiceUnavail.Wrap(err, "failed to check S3 readiness").WithOp("objectstore.ping")
+	}
+	if !exists {
+		return fault.ErrServiceUnavail.New("S3 bucket is missing").WithOp("objectstore.ping")
+	}
+	return nil
 }
 
 // ObjectKey формирует ключ объекта для события.

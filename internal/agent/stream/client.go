@@ -21,8 +21,8 @@ type AgentClient struct {
 	acks map[string]chan struct{}
 }
 
-func NewAgentClient(ctx context.Context, gatewayAddr, token string) (*AgentClient, error) {
-	conn, err := grpcutil.Dial(ctx, gatewayAddr)
+func NewAgentClient(ctx context.Context, gatewayAddr, token string, tlsConfig grpcutil.Config) (*AgentClient, error) {
+	conn, err := grpcutil.Dial(ctx, gatewayAddr, tlsConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +44,10 @@ func (c *AgentClient) RunSession(
 	hello *qrokv1.AgentHello,
 	handle func(ctx context.Context, send func(context.Context, *qrokv1.EventEnvelope) error) error,
 ) error {
-	streamCtx := grpcutil.WithBearer(ctx, token)
+	sessionCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	streamCtx := grpcutil.WithBearer(sessionCtx, token)
 	stream, err := c.client.AgentStream(streamCtx)
 	if err != nil {
 		return fault.ErrServiceUnavail.Wrap(err, "failed to open AgentStream").WithOp("agent.stream.open")
@@ -59,20 +62,24 @@ func (c *AgentClient) RunSession(
 	recvDone := make(chan error, 1)
 	go func() {
 		recvDone <- c.recvLoop(stream)
+		cancel()
 	}()
 
 	send := func(sendCtx context.Context, ev *qrokv1.EventEnvelope) error {
+		ack, unregister := c.registerAck(ev.GetEventId())
+		defer unregister()
+
 		if err := stream.Send(&qrokv1.AgentStreamRequest{
 			Msg: &qrokv1.AgentStreamRequest_Event{Event: ev},
 		}); err != nil {
 			return fault.ErrServiceUnavail.Wrap(err, "failed to send event").WithOp("agent.stream.send")
 		}
-		return c.waitAck(sendCtx, ev.GetEventId())
+		return waitAck(sendCtx, ack)
 	}
 
-	err = handle(ctx, send)
+	err = handle(sessionCtx, send)
 
-	stream.CloseSend()
+	_ = stream.CloseSend()
 	select {
 	case recvErr := <-recvDone:
 		if err == nil && recvErr != nil && recvErr != io.EOF {
@@ -105,17 +112,20 @@ func (c *AgentClient) recvLoop(stream grpc.BidiStreamingClient[qrokv1.AgentStrea
 	}
 }
 
-func (c *AgentClient) waitAck(ctx context.Context, eventID string) error {
+func (c *AgentClient) registerAck(eventID string) (<-chan struct{}, func()) {
 	ch := make(chan struct{}, 1)
 	c.mu.Lock()
 	c.acks[eventID] = ch
 	c.mu.Unlock()
-	defer func() {
+
+	return ch, func() {
 		c.mu.Lock()
 		delete(c.acks, eventID)
 		c.mu.Unlock()
-	}()
+	}
+}
 
+func waitAck(ctx context.Context, ch <-chan struct{}) error {
 	select {
 	case <-ch:
 		return nil

@@ -7,15 +7,17 @@ import (
 	"github.com/oklog/ulid/v2"
 
 	"qrok/internal/bus/inproc"
-	"qrok/internal/controlplane/infrastructure/auth"
-	"qrok/internal/controlplane/infrastructure/delivery"
-	"qrok/internal/controlplane/infrastructure/eventstore"
 	"qrok/internal/controlplane/infrastructure/models"
 )
 
-// ReplayService schedules replay deliveries.
-type ReplayService interface {
-	Replay(ctx context.Context, subject *models.Subject, eventID, target string) (*ReplayResult, error)
+type replayEventQuerier interface {
+	GetByID(ctx context.Context, id string) (*models.Event, error)
+	GetByIDForProject(ctx context.Context, projectID, eventID string) (*models.Event, error)
+	GetPayload(ctx context.Context, ev *models.Event) ([]byte, error)
+}
+
+type replayDeliveryQuerier interface {
+	CreatePending(ctx context.Context, rec *models.Delivery) error
 }
 
 // ReplayResult is the outcome of scheduling a replay.
@@ -26,31 +28,29 @@ type ReplayResult struct {
 	Status     string `json:"status"`
 }
 
-type replayService struct {
-	events     eventstore.Repository
-	deliveries delivery.Repository
-	auth       auth.Repository
+// Replay schedules replay deliveries.
+type Replay struct {
+	events     replayEventQuerier
+	deliveries replayDeliveryQuerier
+	scope      scopeQuerier
 	bus        inproc.EventBus
 }
 
-func NewReplayService(events eventstore.Repository, deliveries delivery.Repository, authRepo auth.Repository, eventBus inproc.EventBus) ReplayService {
-	return &replayService{
+func NewReplayService(events replayEventQuerier, deliveries replayDeliveryQuerier, scope scopeQuerier, eventBus inproc.EventBus) *Replay {
+	return &Replay{
 		events:     events,
 		deliveries: deliveries,
-		auth:       authRepo,
+		scope:      scope,
 		bus:        eventBus,
 	}
 }
 
-func (s *replayService) Replay(ctx context.Context, subject *models.Subject, eventID, target string) (*ReplayResult, error) {
+func (s *Replay) Replay(ctx context.Context, subject *models.Subject, eventID, target string) (*ReplayResult, error) {
 	const op = "replay.replay"
-	if eventID == "" {
-		return nil, validationErr(op, "event_id is required")
-	}
 	if target == "" {
 		target = "*"
 	}
-	if err := authorizeEvent(ctx, s.auth, subject, eventID); err != nil {
+	if err := authorizeEvent(ctx, s.scope, subject, eventID); err != nil {
 		return nil, err
 	}
 

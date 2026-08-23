@@ -3,27 +3,28 @@ package service
 import (
 	"context"
 
-	"qrok/internal/controlplane/infrastructure/delivery"
 	"qrok/internal/controlplane/infrastructure/models"
 )
 
-// DeliveryService records delivery results from dev clients.
-type DeliveryService interface {
-	RecordResult(ctx context.Context, result *models.DeliveryResult) error
+type deliveryQuerier interface {
+	UpsertResult(ctx context.Context, rec *models.Delivery) error
 }
 
-type deliveryService struct {
-	repo delivery.Repository
+// Delivery records delivery results from dev clients.
+type Delivery struct {
+	repo  deliveryQuerier
+	scope scopeQuerier
 }
 
-func NewDeliveryService(repo delivery.Repository) DeliveryService {
-	return &deliveryService{repo: repo}
+func NewDeliveryService(repo deliveryQuerier, scope scopeQuerier) *Delivery {
+	return &Delivery{repo: repo, scope: scope}
 }
 
-func (s *deliveryService) RecordResult(ctx context.Context, result *models.DeliveryResult) error {
+func (s *Delivery) RecordResult(ctx context.Context, subject *models.Subject, result *models.DeliveryResult) error {
 	const op = "delivery.record_result"
-	if result == nil || result.DeliveryID == "" || result.EventID == "" {
-		return validationErr(op, "incomplete DeliveryResult")
+
+	if err := authorizeEvent(ctx, s.scope, subject, result.EventID); err != nil {
+		return err
 	}
 
 	status := models.DeliveryStatusDelivered

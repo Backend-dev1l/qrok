@@ -19,6 +19,12 @@
       "skillPath": "kafka-development/SKILL.md",
       "computedHash": "499e177c28a229509dba547e1370ed856d55e5356501ad40fdbf14389bdbc3f3"
     },
+    "ponytail": {
+      "source": "DietrichGebert/ponytail",
+      "sourceType": "github",
+      "skillPath": "skills/ponytail/SKILL.md",
+      "computedHash": "210fa0831f649ce9f8a305f7b7c8cf2a0dd09ac4dd53067109941b96e7811d4e"
+    },
     "rabbitmq-development": {
       "source": "mindrally/skills",
       "sourceType": "github",

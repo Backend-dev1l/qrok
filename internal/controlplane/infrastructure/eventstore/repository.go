@@ -16,36 +16,21 @@ import (
 
 var ErrCorruptEvent = errors.New("corrupt event row")
 
-// ObjectStore stores large event payloads outside Postgres.
-type ObjectStore interface {
-	Put(ctx context.Context, key string, data []byte) error
-	Get(ctx context.Context, key string) ([]byte, error)
-}
-
-// Repository persists and reads events.
-type Repository interface {
-	Insert(ctx context.Context, ev *models.Event) (bool, error)
-	GetByID(ctx context.Context, id string) (*models.Event, error)
-	GetByIDForProject(ctx context.Context, projectID, eventID string) (*models.Event, error)
-	GetPayload(ctx context.Context, ev *models.Event) ([]byte, error)
-	ListByTunnel(ctx context.Context, tunnelID string, limit int) ([]*models.Event, error)
-}
-
 type Config struct {
 	PayloadThresholdBytes int64
 }
 
-type repository struct {
+type Repository struct {
 	pool    *pgxpool.Pool
-	objects ObjectStore
+	objects *objectstore.Client
 	cfg     Config
 }
 
-func New(pool *pgxpool.Pool, objects ObjectStore, cfg Config) Repository {
-	return &repository{pool: pool, objects: objects, cfg: cfg}
+func New(pool *pgxpool.Pool, objects *objectstore.Client, cfg Config) *Repository {
+	return &Repository{pool: pool, objects: objects, cfg: cfg}
 }
 
-func (r *repository) Insert(ctx context.Context, ev *models.Event) (bool, error) {
+func (r *Repository) Insert(ctx context.Context, ev *models.Event) (bool, error) {
 	payloadSize := int32(len(ev.Payload))
 
 	var payload []byte
@@ -53,7 +38,7 @@ func (r *repository) Insert(ctx context.Context, ev *models.Event) (bool, error)
 
 	switch {
 	case payloadSize == 0:
-		payload = nil
+		payload = []byte{}
 	case int64(payloadSize) < r.cfg.PayloadThresholdBytes:
 		payload = ev.Payload
 	default:
@@ -78,7 +63,7 @@ func (r *repository) Insert(ctx context.Context, ev *models.Event) (bool, error)
 	if err != nil {
 		return false, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	dedupTag, err := tx.Exec(ctx, `
 		INSERT INTO event_dedup (id) VALUES ($1)
@@ -110,8 +95,8 @@ func (r *repository) Insert(ctx context.Context, ev *models.Event) (bool, error)
 	return true, nil
 }
 
-func (r *repository) GetPayload(ctx context.Context, ev *models.Event) ([]byte, error) {
-	if len(ev.Payload) > 0 {
+func (r *Repository) GetPayload(ctx context.Context, ev *models.Event) ([]byte, error) {
+	if ev.Payload != nil {
 		return ev.Payload, nil
 	}
 	if ev.PayloadRef == "" {
@@ -120,12 +105,12 @@ func (r *repository) GetPayload(ctx context.Context, ev *models.Event) ([]byte, 
 	return r.objects.Get(ctx, ev.PayloadRef)
 }
 
-func (r *repository) GetByID(ctx context.Context, id string) (*models.Event, error) {
+func (r *Repository) GetByID(ctx context.Context, id string) (*models.Event, error) {
 	row := r.pool.QueryRow(ctx, eventSelectSQL+` WHERE e.id = $1`, id)
 	return scanEvent(row)
 }
 
-func (r *repository) GetByIDForProject(ctx context.Context, projectID, eventID string) (*models.Event, error) {
+func (r *Repository) GetByIDForProject(ctx context.Context, projectID, eventID string) (*models.Event, error) {
 	row := r.pool.QueryRow(ctx, eventSelectSQL+`
 		JOIN tunnels t ON t.id = e.tunnel_id
 		WHERE e.id = $1 AND t.project_id = $2
@@ -133,7 +118,7 @@ func (r *repository) GetByIDForProject(ctx context.Context, projectID, eventID s
 	return scanEvent(row)
 }
 
-func (r *repository) ListByTunnel(ctx context.Context, tunnelID string, limit int) ([]*models.Event, error) {
+func (r *Repository) ListByTunnel(ctx context.Context, tunnelID string, limit int) ([]*models.Event, error) {
 	rows, err := r.pool.Query(ctx, eventSelectSQL+`
 		WHERE e.tunnel_id = $1
 		ORDER BY e.created_at DESC

@@ -1,4 +1,7 @@
 const $ = (id) => document.getElementById(id);
+const tokenStorageKey = 'qrok_access_token';
+
+$('token').value = sessionStorage.getItem(tokenStorageKey) || '';
 
 function setStatus(msg, cls = '') {
   const el = $('status');
@@ -9,15 +12,23 @@ function setStatus(msg, cls = '') {
 $('approve').onclick = async () => {
   const userCode = $('user-code').value.trim();
   const projectID = $('project-id').value.trim();
-  if (!userCode || !projectID) {
-    return setStatus('Укажите user code и project_id', 'error');
+  const token = $('token').value.trim();
+  if (!userCode) {
+    return setStatus('Укажите user code', 'error');
+  }
+  if (token) {
+    sessionStorage.setItem(tokenStorageKey, token);
   }
 
   setStatus('Отправка…');
   try {
     const res = await fetch('/api/v1/oauth/device/approve', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify({ user_code: userCode, project_id: projectID }),
     });
     const body = await res.json().catch(() => ({}));

@@ -7,11 +7,18 @@ package kafka
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
 	kafkago "github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go/sasl"
+	"github.com/segmentio/kafka-go/sasl/plain"
+	"github.com/segmentio/kafka-go/sasl/scram"
 
 	"qrok/internal/agent/source"
 	"qrok/pkg/fault"
@@ -29,6 +36,13 @@ type Config struct {
 	MinBytes int           // по умолчанию 1
 	MaxBytes int           // по умолчанию 10 МБ
 	MaxWait  time.Duration // по умолчанию 500ms
+
+	TLS           bool
+	TLSServerName string
+	TLSCAFile     string
+	SASLMechanism string
+	SASLUsername  string
+	SASLPassword  string
 }
 
 // GroupID возвращает итоговое имя consumer group.
@@ -60,11 +74,12 @@ type client struct {
 
 	mu     sync.Mutex
 	reader *kafkago.Reader
+	dialer *kafkago.Dialer
 }
 
 var _ Source = (*client)(nil)
 
-func New(cfg Config) (Source, error) {
+func New(cfg Config) (*client, error) {
 	if len(cfg.Brokers) == 0 {
 		return nil, fault.ErrValidation.
 			New("Kafka broker addresses are not set").
@@ -76,7 +91,11 @@ func New(cfg Config) (Source, error) {
 			New("tunnel_id or explicit group_id required for consumer group").
 			WithOp("agent.kafka.new")
 	}
-	return &client{cfg: cfg}, nil
+	dialer, err := newDialer(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return &client{cfg: cfg, dialer: dialer}, nil
 }
 
 func (c *client) Subscribe(ctx context.Context, topics []string, out chan<- *source.Event) error {
@@ -136,9 +155,63 @@ func (c *client) startReader(topics []string) (*kafkago.Reader, error) {
 		MinBytes:    orDefault(c.cfg.MinBytes, 1),
 		MaxBytes:    orDefault(c.cfg.MaxBytes, 10<<20),
 		MaxWait:     orDefault(c.cfg.MaxWait, 500*time.Millisecond),
+		Dialer:      c.dialer,
 		// CommitInterval = 0: только синхронные явные коммиты в Ack.
 	})
 	return c.reader, nil
+}
+
+func newDialer(cfg Config) (*kafkago.Dialer, error) {
+	dialer := &kafkago.Dialer{Timeout: 10 * time.Second, DualStack: true}
+
+	if cfg.TLS {
+		tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12, ServerName: cfg.TLSServerName}
+		if cfg.TLSCAFile != "" {
+			pem, err := os.ReadFile(cfg.TLSCAFile)
+			if err != nil {
+				return nil, fault.ErrValidation.Wrap(err, "failed to read Kafka CA file").WithOp("agent.kafka.tls")
+			}
+			roots, err := x509.SystemCertPool()
+			if err != nil {
+				return nil, fault.ErrInternal.Wrap(err, "failed to load system CA pool").WithOp("agent.kafka.tls")
+			}
+			if !roots.AppendCertsFromPEM(pem) {
+				return nil, fault.ErrValidation.New("Kafka CA file contains no certificates").WithOp("agent.kafka.tls")
+			}
+			tlsConfig.RootCAs = roots
+		}
+		dialer.TLS = tlsConfig
+	}
+
+	mechanism, err := saslMechanism(cfg)
+	if err != nil {
+		return nil, err
+	}
+	dialer.SASLMechanism = mechanism
+	return dialer, nil
+}
+
+func saslMechanism(cfg Config) (sasl.Mechanism, error) {
+	switch strings.ToLower(cfg.SASLMechanism) {
+	case "":
+		return nil, nil
+	case "plain":
+		return plain.Mechanism{Username: cfg.SASLUsername, Password: cfg.SASLPassword}, nil
+	case "scram-sha-256":
+		mechanism, err := scram.Mechanism(scram.SHA256, cfg.SASLUsername, cfg.SASLPassword)
+		if err != nil {
+			return nil, fault.ErrValidation.Wrap(err, "invalid Kafka SCRAM credentials").WithOp("agent.kafka.sasl")
+		}
+		return mechanism, nil
+	case "scram-sha-512":
+		mechanism, err := scram.Mechanism(scram.SHA512, cfg.SASLUsername, cfg.SASLPassword)
+		if err != nil {
+			return nil, fault.ErrValidation.Wrap(err, "invalid Kafka SCRAM credentials").WithOp("agent.kafka.sasl")
+		}
+		return mechanism, nil
+	default:
+		return nil, fault.ErrValidation.New("unsupported Kafka SASL mechanism").WithOp("agent.kafka.sasl")
+	}
 }
 
 // Ack коммитит оффсет события в consumer group агента.
@@ -149,7 +222,7 @@ func (c *client) Ack(ctx context.Context, ev *source.Event) error {
 
 	if reader == nil {
 		return fault.ErrConflict.
-			New("Ack до подписки").
+			New("Ack called before subscription").
 			WithOp("agent.kafka.ack")
 	}
 

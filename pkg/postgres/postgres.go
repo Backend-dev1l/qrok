@@ -49,7 +49,7 @@ func New(ctx context.Context, cfg Config) (*pgxpool.Pool, error) {
 
 func connectFault(err error) error {
 	return fault.ErrServiceUnavail.
-		Wrap(err, "PostgreSQL недоступен").
+		Wrap(err, "PostgreSQL unavailable").
 		WithOp("postgres.connect").
 		WithHint("check DSN and that the database is running (make compose-up)")
 }

@@ -19,11 +19,11 @@ func newAgentCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "agent",
-		Short: "Агент на стейджинге: читает брокер, шлёт события в облако",
+		Short: "Staging agent: reads broker, streams events to the cloud",
 	}
 	start := &cobra.Command{
 		Use:   "start",
-		Short: "Запустить агента",
+		Short: "Start the agent",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.LoadAgent(configPath)
 			if err != nil {
@@ -50,7 +50,7 @@ func newAgentCmd() *cobra.Command {
 			return nil
 		},
 	}
-	start.Flags().StringVar(&configPath, "config", "", "путь к YAML-конфигу агента")
+	start.Flags().StringVar(&configPath, "config", "", "path to agent YAML config")
 	cmd.AddCommand(start)
 	return cmd
 }
