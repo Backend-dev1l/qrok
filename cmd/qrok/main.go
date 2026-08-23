@@ -10,6 +10,9 @@ import (
 	"qrok/pkg/fault"
 )
 
+// version is injected at release time by GoReleaser (-X main.version=...).
+var version = "dev"
+
 func main() {
 	if err := newRootCmd().Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, fault.RenderCLI(err))
@@ -39,7 +42,7 @@ func versionCmd() *cobra.Command {
 		Use:   "version",
 		Short: "CLI version",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println("qrok dev (stage 1, cobra)")
+			fmt.Println("qrok " + version)
 		},
 	}
 }

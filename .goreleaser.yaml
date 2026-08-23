@@ -1,0 +1,76 @@
+# GoReleaser v2. Validate: goreleaser check. Dry run: goreleaser release --snapshot --clean.
+#
+# A pushed v* tag triggers .github/workflows/release.yml, which builds the qrok
+# CLI for linux/darwin/windows x amd64/arm64, attaches archives + checksums to
+# the GitHub release, and publishes a Homebrew cask to Backend-dev1l/homebrew-tap.
+#
+# Homebrew prerequisites (one-time, maintainer):
+#   1. Create the empty repo Backend-dev1l/homebrew-tap.
+#   2. Add a HOMEBREW_TAP_TOKEN secret to this repo: a PAT with contents:write
+#      on the tap repo. Without the secret the cask publish is skipped and the
+#      rest of the release still succeeds.
+
+version: 2
+
+project_name: qrok
+
+builds:
+  - main: ./cmd/qrok
+    binary: qrok
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  # Matches uname output so the README one-liner works:
+  # qrok_Linux_x86_64, qrok_Linux_aarch64, qrok_Darwin_arm64, qrok_Windows_x86_64, ...
+  - name_template: >-
+      {{ .ProjectName }}_{{ title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if and (eq .Os "linux") (eq .Arch "arm64") }}aarch64
+      {{- else }}{{ .Arch }}{{ end }}
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs"
+      - "^test"
+      - "^chore"
+      - "^ci"
+
+homebrew_casks:
+  - name: qrok
+    repository:
+      owner: Backend-dev1l
+      name: homebrew-tap
+      token: '{{ envOrDefault "HOMEBREW_TAP_TOKEN" "" }}'
+    homepage: https://github.com/Backend-dev1l/qrok
+    description: "ngrok for Kafka: tunnel staging events to localhost, capture and replay"
+    # Skip the tap publish when the workflow has no HOMEBREW_TAP_TOKEN secret.
+    skip_upload: '{{ if envOrDefault "HOMEBREW_TAP_TOKEN" "" }}false{{ else }}true{{ end }}'
+    # Binaries are not signed/notarized; strip the quarantine bit so Gatekeeper
+    # does not block the first run (see goreleaser.com homebrew_casks docs).
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/qrok"]
+          end

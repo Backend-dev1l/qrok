@@ -1,82 +1,126 @@
 # qrok
 
-Туннель и реплеер для асинхронных событий — «ngrok для брокеров».
+**ngrok for Kafka.** Tunnel events from a staging broker straight to your laptop — capture everything, replay anything.
 
-Агент на стейджинге читает топики Kafka/RabbitMQ (собственной consumer group, не мешая боевым консьюмерам) и прокидывает события на localhost разработчика. Каждое событие сохраняется в облаке и может быть переотправлено кнопкой Replay — без повторной генерации сообщений и без риска «сжечь» их в брокере.
+Debugging an event consumer usually means: deploy to staging, produce a test message, dig through logs, repeat. qrok removes the loop. A read-only agent sits next to your staging Kafka and streams every event to your local HTTP handler in real time. Each event is captured in the cloud, so you can replay it with one click — no re-producing, no "burning" messages in the broker.
 
-## Структура
+- **Live tunnel** — staging events hit `localhost` seconds after they are produced.
+- **Read-only by design** — the agent consumes with its *own* consumer group. It never commits other groups' offsets and never writes to your topics. Production consumers don't notice it exists.
+- **Capture & replay** — every event is stored (Postgres + S3). Replay it from the dashboard or CLI without touching the broker.
 
-- `cmd/qrok` — CLI: `qrok agent` (стейджинг), `qrok listen` (локальная машина), `qrok login`, `qrok replay`
-- `cmd` — точка входа облачного сервера (`internal/server`)
-- `internal/server` — Tunnel Gateway + Control Plane (запуск)
-- `internal/middleware` — HTTP middleware (auth, security, cors, …)
-- `internal/controlplane/infrastructure/models` — доменные типы control plane (Subject, Event, Delivery, …)
-- `internal/controlplane/service` — use cases: auth, device, events, replay, delivery
-- `internal/controlplane/infrastructure` — persistence: auth, eventstore, delivery (Postgres/S3)
-- `internal/transport/http` — REST API и дашборд (пакет `httpapi`)
-- `internal/transport/grpc` — Tunnel Gateway gRPC (пакет `gateway`)
-- `pkg/fault` — единый пакет ошибок (HTTP/gRPC/CLI/slog-рендеры)
-- `pkg/logger` — настройка slog (формат, уровень, логгер в context)
-- `pkg/postgres` — подключение к PostgreSQL через pgxpool
-- `proto/` — protobuf-контракт туннеля (buf)
-- `migrations/` — goose SQL-миграции
-- `deploy/` — docker-compose для локальной разработки
+Kafka is supported today; RabbitMQ is next.
 
-## Быстрый старт (dev)
+## Install
+
+**macOS (Homebrew):**
 
 ```bash
-make tools        # установить buf, goose, golangci-lint, gremlins
-make compose-up   # Kafka + Postgres + Redis + MinIO
-make migrate-up   # накатить миграции
-make seed-dev     # org/project/tunnel/agent_token для локальных прогонов
-make run-server   # HTTP :8080, gRPC :9090
-make run-listen   # dev-клиент → localhost (в другом терминале)
-make run-agent    # агент → Kafka (на стейджинге / с compose)
+brew install Backend-dev1l/tap/qrok
 ```
 
-Перед `run-listen` без `gateway.allow_insecure_listen`: `qrok login --api http://127.0.0.1:8080 --project <project_id из seed-dev>`.
-
-Дашборд (MVP): http://127.0.0.1:8080/dashboard/ — лента событий и Replay.  
-**WSL2 + браузер Windows:** если `127.0.0.1` не открывается, используй IP из `hostname -I` (в логе сервера — `dashboard_wsl`).  
-Для dev включите `http.allow_insecure_api: true` в конфиге сервера.
+**Linux / Windows / macOS binaries** — download from [GitHub Releases](https://github.com/Backend-dev1l/qrok/releases) (amd64 and arm64 for all three platforms):
 
 ```bash
-make build        # бинари в ./bin
-make test         # unit-тесты
-make verify       # сборка + тесты (после рефакторинга)
+curl -sL https://github.com/Backend-dev1l/qrok/releases/latest/download/qrok_$(uname -s)_$(uname -m).tar.gz | tar xz qrok
 ```
 
-Остальные таргеты: `make help`.
+**From source** (Go 1.26+):
 
-## Agent skills
+```bash
+git clone git@github.com:Backend-dev1l/qrok.git && cd qrok && make build   # → ./bin/qrok
+```
 
-Скиллы лежат в **`.claude/skills/`** (канон). Cursor подхватывает копию из `.cursor/skills/` после `make sync-skills`.
+## Use
 
-| Skill                      | Назначение                                                               |
-| -------------------------- | ------------------------------------------------------------------------ |
-| `go-backend-microservices` | архитектура Go-микросервисов                                             |
-| `golang-pro`               | идиоматичный Go ([upstream](https://github.com/Jeffallan/claude-skills)) |
-| `go-testing`               | тесты qrok (testify, integration, e2e)                                   |
-| `kafka-development`        | Kafka / agent source                                                     |
-| `rabbitmq-development`     | RabbitMQ (этап 2)                                                        |
+**On staging** — point the agent at your broker (read-only, safe to run next to production consumers):
 
-В чате: `/go-testing`, `/golang-pro`, `/kafka-development`, …
+```yaml
+# qrok-agent.yaml
+agent:
+  token: "qrok_agt_..."     # issued by the control plane
+  tunnel_id: my-tunnel
+  gateway: qrok.example.com:9090
+  source_type: kafka
+  topics: [orders, payments]
+kafka:
+  brokers: [broker-1:9092]
+```
 
-## Переменные окружения
+```bash
+qrok agent start --config qrok-agent.yaml
+```
 
-Приоритет конфига сервера: дефолты в коде → YAML (`deploy/server.example.yaml` → свой `qrok.yaml`) → env `QROK_*` → флаги.
+**On your laptop** — log in once, then listen:
 
-Для локальной разработки: `cp .env.example .env` — файл подхватывается и docker-compose'ом (креды Postgres/MinIO), и всеми make-таргетами (goose, тесты, запуск сервера). `.env` в git не попадает.
+```bash
+qrok login --api https://qrok.example.com     # OAuth device flow, token saved locally
+qrok listen --config qrok-listen.yaml         # events → POST http://127.0.0.1:8888/
+```
 
-Секрет-менеджер (Doppler и т.п.) подключается без правок кода, когда появится стейджинг: конфиг читает обычные env-переменные, поэтому достаточно `doppler run -- make run-server`.
+```yaml
+# qrok-listen.yaml
+listen:
+  gateway: qrok.example.com:9090
+  tunnel_id: my-tunnel
+  topics: []                      # empty = all tunnel topics
+  forward: http://127.0.0.1:8888/
+```
 
-Для локального compose примеры agent/listen явно используют `tls: false`. Для внешнего gateway TLS завершается на reverse proxy/LB; в agent/listen включите `tls: true` и при необходимости задайте `tls_server_name`/`tls_ca_file`. Kafka поддерживает TLS и SASL PLAIN/SCRAM через секцию `kafka`.
+Every event arrives as an HTTP POST with the original payload as the body plus metadata headers:
 
-При `http.allow_insecure_api: false` dashboard принимает project/dev token в поле Access token. Подтверждение `qrok login` также требует токен существующего проекта; новый dev token затем подходит и для gRPC listen, и для REST/replay.
+```text
+POST / HTTP/1.1
+Content-Type: application/json
+X-Qrok-Event-Id: 01JD3V7Q9K...
+X-Qrok-Topic: orders
+X-Qrok-Key: order-42
+X-Qrok-Offset: 1337
+X-Qrok-Replay: false
 
-## Тестирование
+{"order_id": 42, "status": "created"}
+```
 
-- `make test` — unit
-- `make test-integration` — интеграционные (нужен `make compose-up`)
-- `make test-e2e` — функциональные, сквозной путь брокер → localhost
-- `make mutation` — мутационные (gremlins) на критичных пакетах
+**Replay** a captured event — from the dashboard (`/dashboard/`) or the CLI:
+
+```bash
+qrok replay 01JD3V7Q9K... --api https://qrok.example.com
+```
+
+## How it works
+
+```mermaid
+flowchart LR
+    subgraph staging [Staging]
+        K[(Kafka)] -->|"consume<br/>(own consumer group,<br/>read-only)"| A[qrok agent]
+    end
+    subgraph cloud [qrok server]
+        A -->|gRPC / TLS| G[Tunnel Gateway]
+        G --> S[(Event store<br/>Postgres + S3)]
+        S --> D[Dashboard<br/>+ Replay API]
+    end
+    subgraph laptop [Your laptop]
+        G -->|gRPC / TLS| L[qrok listen]
+        L -->|HTTP POST| H[localhost:8888]
+    end
+    D -.->|replay| G
+```
+
+1. The **agent** joins the broker with a dedicated consumer group (`qrok-agent-<tunnel_id>`), so it shares nothing with production consumers. It only reads: the single write it performs is committing offsets of its *own* group.
+2. Events are streamed over a mutually authenticated gRPC tunnel (agent tokens on staging, dev tokens issued via OAuth device flow on laptops). TLS protects everything in transit; end-to-end payload encryption (sealed on the agent, opened only by `qrok listen`) is on the roadmap.
+3. The **gateway** persists each event (payloads above a size threshold go to S3) and fans it out to connected `qrok listen` clients.
+4. **Replay** re-delivers a stored event through the same tunnel — the broker is never touched again.
+
+## Try it in one minute
+
+A self-contained demo — test Kafka, a toy producer, and a local receiver — lives in [`examples/kafka-quickstart`](examples/kafka-quickstart/):
+
+```bash
+docker compose -f examples/kafka-quickstart/docker-compose.yml up -d --wait
+```
+
+Full walkthrough in [examples/kafka-quickstart/README.md](examples/kafka-quickstart/README.md).
+
+## Docs
+
+- [`examples/`](examples/) — runnable demos
+- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) — building, testing, project layout, contributor guide

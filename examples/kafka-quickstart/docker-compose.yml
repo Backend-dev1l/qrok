@@ -1,0 +1,24 @@
+# Quickstart stack: reuses the repo dev stack (Kafka, Postgres, MinIO, Redis)
+# and adds a toy producer that emits one JSON order to the "demo" topic every 2s.
+#
+# The project name matches deploy/docker-compose.yml on purpose: if you already
+# ran `make compose-up`, this file only adds the producer on top instead of
+# fighting over ports.
+name: qrok-dev
+
+include:
+  - ../../deploy/docker-compose.yml
+
+services:
+  producer:
+    image: apache/kafka:3.9.1
+    # Kafka advertises localhost:9092 (for host access), so the producer shares
+    # the broker's network namespace to reach it at that address.
+    network_mode: service:kafka
+    depends_on:
+      kafka:
+        condition: service_healthy
+    volumes:
+      - ./producer.sh:/producer.sh:ro
+    entrypoint: ["/bin/bash", "/producer.sh"]
+    restart: unless-stopped
